@@ -1,3 +1,4 @@
+import asyncio
 import os
 import uuid
 import logging
@@ -5,11 +6,11 @@ from pathlib import Path
 from typing import Dict, Any
 
 import anthropic
-from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi import FastAPI, HTTPException, Header, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, Response
 
-from models import CandidateInfo, ScoreRequest, FinalReportRequest
+from models import CandidateInfo, ScoreRequest, FinalReportRequest, SubmitAllRequest
 from question_bank import load_questions, get_session_questions
 from scorer import score_question
 from report_generator import generate_final_report
@@ -19,19 +20,19 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ─── App Setup ───────────────────────────────────────────────────────────────
-app = FastAPI(title="RDC SRT Assessment Engine", version="2.1")
+app = FastAPI(title="RDC SBCA Engine", version="3.0")
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # ─── Config ──────────────────────────────────────────────────────────────────
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "rdc@admin2024")
-EXCEL_PATH     = os.environ.get("EXCEL_PATH", str(Path(__file__).parent / "data" / "RDC_SRT_Master_100.xlsx"))
+ADMIN_PASSWORD     = os.environ.get("ADMIN_PASSWORD", "rdc@admin2024")
+EXCEL_PATH         = os.environ.get("EXCEL_PATH", str(Path(__file__).parent / "data" / "RDC_SRT_Master_100.xlsx"))
 ASSESSMENT_MINUTES = int(os.environ.get("ASSESSMENT_MINUTES", "60"))
 
 # ─── Globals ─────────────────────────────────────────────────────────────────
-sessions: Dict[str, Any] = {}
+sessions:     Dict[str, Any] = {}
 questions_db = load_questions(EXCEL_PATH)
-client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+client       = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
 
 # ─── Page Routes ─────────────────────────────────────────────────────────────
 @app.get("/")
@@ -75,22 +76,22 @@ async def admin_login(payload: dict):
 async def list_sessions(x_admin_token: str = Header(None)):
     if x_admin_token != ADMIN_PASSWORD:
         raise HTTPException(status_code=401, detail="Unauthorized")
-
     result = []
     for sid, s in sessions.items():
-        c = s.get("candidate", {})
+        c      = s.get("candidate", {})
         report = s.get("report", {})
         result.append({
-            "session_id": sid,
-            "candidate_name":  c.get("candidate_name", ""),
-            "plant_location":  c.get("plant_location", ""),
-            "assessment_date": c.get("assessment_date", ""),
-            "status":          s.get("status", "in_progress"),
-            "total_score":     report.get("overall_score_out_of_300", "—"),
-            "normalized":      report.get("normalized_score_out_of_100", "—"),
-            "readiness":       report.get("overall_readiness", "—"),
+            "session_id":         sid,
+            "candidate_name":     c.get("candidate_name", ""),
+            "plant_location":     c.get("plant_location", ""),
+            "assessment_date":    c.get("assessment_date", ""),
+            "status":             s.get("status", "in_progress"),
+            "total_score":        report.get("overall_score_out_of_300"),
+            "normalized":         report.get("normalized_score_out_of_100"),
+            "readiness":          report.get("overall_readiness", "—"),
             "questions_answered": len(s.get("scores", {})),
-            "has_pdf":         "pdf_bytes" in s,
+            "has_pdf":            "pdf_bytes" in s,
+            "error":              s.get("error"),
         })
     result.sort(key=lambda x: x["assessment_date"], reverse=True)
     return result
@@ -106,118 +107,7 @@ async def get_report(session_id: str, x_admin_token: str = Header(None)):
     report = session.get("report")
     if not report:
         raise HTTPException(status_code=404, detail="Report not yet generated")
-    return {
-        "candidate": session["candidate"],
-        "report":    report,
-        "scores":    session.get("scores", {}),
-    }
-
-# ─── API: Start Session ───────────────────────────────────────────────────────
-@app.post("/api/start-session")
-async def start_session(candidate: CandidateInfo):
-    session_id = str(uuid.uuid4())
-    questions  = get_session_questions(questions_db, per_competency=3)
-
-    sessions[session_id] = {
-        "candidate": candidate.model_dump(),
-        "questions": questions,
-        "scores":    {},
-        "status":    "in_progress",
-    }
-
-    # Return questions WITHOUT competency labels — hide from candidate
-    safe_questions = [
-        {
-            "question_number":     q["question_number"],
-            "srt_id":              q["srt_id"],
-            "primary_competency":  q["primary_competency"],   # needed for scoring
-            "secondary_competency":q["secondary_competency"], # needed for scoring
-            "situation":           q["situation"],
-        }
-        for q in questions
-    ]
-    return {
-        "session_id":      session_id,
-        "questions":       safe_questions,
-        "total_questions": len(questions),
-    }
-
-# ─── API: Score One Question ──────────────────────────────────────────────────
-@app.post("/api/score-question")
-async def score_one(req: ScoreRequest):
-    session = sessions.get(req.session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    result = score_question(
-        client=client,
-        srt_id=req.srt_id,
-        situation=req.situation,
-        primary_competency=req.primary_competency,
-        secondary_competency=req.secondary_competency,
-        candidate_transcript=req.candidate_transcript,
-    )
-    sessions[req.session_id]["scores"][req.srt_id] = {
-        "competency":   req.primary_competency,
-        "score":        result.get("total", 0),
-        "strengths":    result.get("strengths", []),
-        "improvements": result.get("improvements", []),
-        "details":      result,
-    }
-    return result
-
-# ─── API: Generate Final Report ──────────────────────────────────────────────
-@app.post("/api/final-report")
-async def final_report(req: FinalReportRequest):
-    session = sessions.get(req.session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    candidate = session["candidate"]
-    scores    = session["scores"]
-    questions = session["questions"]
-
-    # Build results — include ALL 30 questions (unanswered = score 0)
-    results = []
-    for q in questions:
-        srt_id = q["srt_id"]
-        if srt_id in scores:
-            results.append({
-                "competency":   scores[srt_id]["competency"],
-                "score":        scores[srt_id]["score"],
-                "strengths":    scores[srt_id]["strengths"],
-                "improvements": scores[srt_id]["improvements"],
-            })
-        else:
-            # Unanswered — counts as 0
-            results.append({
-                "competency":   q["primary_competency"],
-                "score":        0,
-                "strengths":    [],
-                "improvements": ["Not answered — counted as zero."],
-            })
-
-    report_data = generate_final_report(
-        client=client,
-        candidate_name=candidate["candidate_name"],
-        plant_location=candidate["plant_location"],
-        assessment_date=candidate["assessment_date"],
-        results=results,
-    )
-
-    # Generate PDF and store as bytes in memory
-    try:
-        pdf_bytes = generate_pdf(report_data=report_data, candidate=candidate)
-        sessions[req.session_id]["pdf_bytes"] = pdf_bytes
-        logger.info("PDF generated (%d bytes) for session %s", len(pdf_bytes), req.session_id)
-    except Exception as e:
-        logger.error("PDF generation failed: %s", e)
-        sessions[req.session_id]["pdf_error"] = str(e)
-
-    sessions[req.session_id]["report"] = report_data
-    sessions[req.session_id]["status"] = "completed"
-
-    return report_data
+    return {"candidate": session["candidate"], "report": report, "scores": session.get("scores", {})}
 
 # ─── API: Admin — Delete Session ─────────────────────────────────────────────
 @app.delete("/api/admin/session/{session_id}")
@@ -229,24 +119,179 @@ async def delete_session(session_id: str, x_admin_token: str = Header(None)):
     del sessions[session_id]
     return {"deleted": True}
 
+# ─── API: Start Session ───────────────────────────────────────────────────────
+@app.post("/api/start-session")
+async def start_session(candidate: CandidateInfo):
+    session_id = str(uuid.uuid4())
+    questions  = get_session_questions(questions_db, per_competency=3)
+    sessions[session_id] = {
+        "candidate": candidate.model_dump(),
+        "questions": questions,
+        "scores":    {},
+        "status":    "in_progress",
+        "progress":  0,
+    }
+    safe_questions = [
+        {
+            "question_number":      q["question_number"],
+            "srt_id":               q["srt_id"],
+            "primary_competency":   q["primary_competency"],
+            "secondary_competency": q["secondary_competency"],
+            "situation":            q["situation"],
+        }
+        for q in questions
+    ]
+    return {"session_id": session_id, "questions": safe_questions, "total_questions": len(questions)}
+
+# ─── BACKGROUND TASK: Process entire assessment asynchronously ────────────────
+async def process_assessment_async(session_id: str) -> None:
+    """Score all questions + generate report in a background thread pool.
+    Uses asyncio.to_thread so the synchronous Anthropic SDK never blocks the event loop.
+    """
+    session = sessions.get(session_id)
+    if not session:
+        return
+
+    questions        = session["questions"]
+    collected_answers = session.get("collected_answers", {})
+    total            = len(questions)
+
+    logger.info("Starting background processing for session %s (%d questions)", session_id, total)
+
+    # ── Step 1: Score every question ─────────────────────────────────────────
+    for i, q in enumerate(questions):
+        srt_id     = q["srt_id"]
+        transcript = collected_answers.get(srt_id, "").strip()
+
+        try:
+            result = await asyncio.to_thread(
+                score_question,
+                client=client,
+                srt_id=srt_id,
+                situation=q["situation"],
+                primary_competency=q["primary_competency"],
+                secondary_competency=q["secondary_competency"],
+                candidate_transcript=transcript,
+            )
+        except Exception as exc:
+            logger.error("Scoring failed for %s: %s", srt_id, exc)
+            result = {
+                "srt_id": srt_id,
+                "total": 0,
+                "strengths": [],
+                "improvements": [f"Scoring error: {str(exc)[:80]}"],
+            }
+
+        session["scores"][srt_id] = {
+            "competency":   q["primary_competency"],
+            "score":        int(result.get("total", 0)),
+            "strengths":    result.get("strengths", []),
+            "improvements": result.get("improvements", []),
+            "details":      result,
+        }
+        session["progress"] = i + 1
+        logger.info("Scored %d/%d for session %s", i + 1, total, session_id)
+
+    # ── Step 2: Build results array (unanswered = 0) ─────────────────────────
+    results = []
+    for q in questions:
+        srt_id = q["srt_id"]
+        if srt_id in session["scores"]:
+            sc = session["scores"][srt_id]
+            results.append({
+                "competency":   sc["competency"],
+                "score":        sc["score"],
+                "strengths":    sc["strengths"],
+                "improvements": sc["improvements"],
+            })
+        else:
+            results.append({
+                "competency":   q["primary_competency"],
+                "score":        0,
+                "strengths":    [],
+                "improvements": ["Not answered — counted as zero."],
+            })
+
+    # ── Step 3: Generate final report ────────────────────────────────────────
+    candidate = session["candidate"]
+    try:
+        report_data = await asyncio.to_thread(
+            generate_final_report,
+            client=client,
+            candidate_name=candidate["candidate_name"],
+            plant_location=candidate["plant_location"],
+            assessment_date=candidate["assessment_date"],
+            results=results,
+        )
+        session["report"] = report_data
+        logger.info("Report generated for session %s", session_id)
+    except Exception as exc:
+        logger.error("Report generation failed for %s: %s", session_id, exc)
+        session["status"] = "failed"
+        session["error"]  = str(exc)
+        return
+
+    # ── Step 4: Generate PDF ─────────────────────────────────────────────────
+    try:
+        pdf_bytes = await asyncio.to_thread(generate_pdf, report_data=report_data, candidate=candidate)
+        session["pdf_bytes"] = pdf_bytes
+        logger.info("PDF generated (%d bytes) for session %s", len(pdf_bytes), session_id)
+    except Exception as exc:
+        logger.error("PDF failed for %s: %s", session_id, exc)
+        session["pdf_error"] = str(exc)
+
+    session["status"] = "completed"
+    logger.info("Session %s fully completed", session_id)
+
+
+# ─── API: Submit All Answers (new primary submit endpoint) ────────────────────
+@app.post("/api/submit-all")
+async def submit_all(req: SubmitAllRequest, background_tasks: BackgroundTasks):
+    """Accept all answers at once, return immediately, process in background."""
+    session = sessions.get(req.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.get("status") == "processing":
+        return {"status": "already_processing"}
+
+    session["collected_answers"] = req.answers
+    session["status"]            = "processing"
+    session["progress"]          = 0
+
+    background_tasks.add_task(process_assessment_async, req.session_id)
+    logger.info("Submitted session %s with %d answers", req.session_id, len(req.answers))
+    return {"status": "processing", "total": len(session["questions"])}
+
+
+# ─── API: Poll submission status ─────────────────────────────────────────────
+@app.get("/api/submission-status/{session_id}")
+async def submission_status(session_id: str):
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {
+        "status":   session.get("status", "in_progress"),
+        "progress": session.get("progress", 0),
+        "total":    len(session.get("questions", [])),
+        "error":    session.get("error"),
+    }
+
+
 # ─── API: Download PDF ────────────────────────────────────────────────────────
 @app.get("/api/download-pdf/{session_id}")
 async def download_pdf(session_id: str, x_admin_token: str = Header(None)):
     if x_admin_token != ADMIN_PASSWORD:
         raise HTTPException(status_code=401, detail="Unauthorized — admin only")
-
     session = sessions.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-
     pdf_bytes = session.get("pdf_bytes")
     if not pdf_bytes:
-        pdf_error = session.get("pdf_error", "PDF not generated yet")
-        raise HTTPException(status_code=404, detail=f"PDF not available: {pdf_error}")
-
-    candidate_name = session["candidate"]["candidate_name"].replace(" ", "_")
+        detail = session.get("pdf_error", "PDF not ready yet")
+        raise HTTPException(status_code=404, detail=detail)
+    name = session["candidate"]["candidate_name"].replace(" ", "_")
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="RDC_SRT_{candidate_name}.pdf"'},
+        headers={"Content-Disposition": f'attachment; filename="RDC_SBCA_{name}.pdf"'},
     )

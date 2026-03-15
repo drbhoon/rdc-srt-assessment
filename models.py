@@ -21,6 +21,11 @@ class FinalReportRequest(BaseModel):
     session_id: str
 
 
+class SubmitAllRequest(BaseModel):
+    session_id: str
+    answers: Dict[str, str]   # { srt_id: transcript }
+
+
 class QuestionOut(BaseModel):
     question_number: int
     srt_id: str

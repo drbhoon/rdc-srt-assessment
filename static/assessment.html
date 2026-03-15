@@ -6,88 +6,64 @@
   <title>Plant Incharge – SBCA Assessment | RDC</title>
   <link rel="stylesheet" href="/static/style.css"/>
   <style>
-    /* ── Header timer badge (compact) ── */
+    /* ── Header timer badge ── */
     .timer-wrap {
       display: flex; align-items: center; gap: 8px;
       background: var(--blue); color: #fff;
       padding: 6px 16px; border-radius: 20px;
       font-family: monospace; font-size: 17px; font-weight: 700;
-      letter-spacing: 2px; user-select: none;
+      letter-spacing: 2px; user-select: none; flex-shrink: 0;
     }
-    .timer-wrap.warn  { background: #CC7700; }
-    .timer-wrap.crit  { background: var(--red); animation: pulse-timer 1s infinite; }
-    @keyframes pulse-timer { 0%,100%{opacity:1} 50%{opacity:.6} }
+    .timer-wrap.warn { background: #CC7700; }
+    .timer-wrap.crit { background: var(--red); animation: pulse-badge 1s infinite; }
+    @keyframes pulse-badge { 0%,100%{opacity:1} 50%{opacity:.6} }
 
     /* ── Circular Timer (fixed right) ── */
     .circle-timer-wrap {
-      position: fixed;
-      top: 50%;
-      right: 18px;
+      position: fixed; top: 50%; right: 18px;
       transform: translateY(-50%);
-      width: 114px;
-      height: 114px;
-      z-index: 300;
-      user-select: none;
+      width: 114px; height: 114px; z-index: 300; user-select: none;
     }
-    .circle-timer-svg {
-      width: 114px;
-      height: 114px;
-      filter: drop-shadow(0 4px 16px rgba(0,0,0,.18));
-    }
+    .circle-timer-svg { width: 114px; height: 114px;
+      filter: drop-shadow(0 4px 16px rgba(0,0,0,.18)); }
     .circle-timer-inner {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
     }
     .circle-time-val {
-      font-size: 17px;
-      font-weight: 800;
-      color: var(--blue);
-      font-family: monospace;
-      line-height: 1;
-      transition: color .4s;
+      font-size: 17px; font-weight: 800; color: var(--blue);
+      font-family: monospace; line-height: 1; transition: color .4s;
     }
     .circle-time-lbl {
-      font-size: 7px;
-      color: var(--grey-mid);
-      letter-spacing: 1.2px;
-      margin-top: 4px;
-      font-weight: 700;
+      font-size: 7px; color: var(--grey-mid);
+      letter-spacing: 1.2px; margin-top: 4px; font-weight: 700;
     }
-    @keyframes pulse-circle { 0%,100%{transform:translateY(-50%) scale(1)} 50%{transform:translateY(-50%) scale(1.06)} }
+    @keyframes pulse-circle { 0%,100%{transform:translateY(-50%) scale(1)} 50%{transform:translateY(-50%) scale(1.07)} }
     .circle-timer-wrap.crit { animation: pulse-circle 1s infinite; }
 
-    /* ── Progress bar area ── */
+    /* ── Progress ── */
     .progress-wrap {
       display: flex; flex-direction: column; gap: 6px;
       padding: 10px 20px; background: var(--blue-light);
       border-bottom: 1px solid #dce4ef;
     }
-    .progress-top-row {
-      display: flex; justify-content: space-between; align-items: center;
-    }
+    .progress-top-row { display: flex; justify-content: space-between; align-items: center; }
 
-    /* ── Navigation ── */
-    .q-nav {
-      display: flex; justify-content: space-between; align-items: center; margin-top: 20px;
-    }
+    /* ── Nav ── */
+    .q-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
     .q-num-display { font-size: 13px; color: var(--grey-mid); font-weight: 600; }
     #charCount { font-size: 12px; color: var(--grey-mid); text-align: right; margin-top: 4px; }
-
     .saved-indicator {
       display: inline-block; font-size: 12px; color: var(--green);
       font-weight: 600; opacity: 0; transition: opacity 0.3s;
     }
     .saved-indicator.show { opacity: 1; }
 
-    /* ── Q-dots palette ── */
+    /* ── Q-dots ── */
     .q-palette {
       display: flex; flex-wrap: wrap; gap: 6px;
-      padding: 14px 20px; background: #fff;
-      border-bottom: 1px solid #dce4ef;
+      padding: 14px 20px; background: #fff; border-bottom: 1px solid #dce4ef;
     }
     .q-dot {
       width: 30px; height: 30px; border-radius: 50%;
@@ -96,9 +72,8 @@
       border: 2px solid #dce4ef; background: #f5f7fa; color: var(--blue);
       transition: background .2s, border-color .2s;
     }
-    .q-dot.answered  { background: var(--green); border-color: var(--green); color:#fff; }
-    .q-dot.current   { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(0,51,102,.15); }
-    .q-dot.skipped   { background: #f0c040; border-color: #e6a800; color: #333; }
+    .q-dot.answered { background: var(--green); border-color: var(--green); color: #fff; }
+    .q-dot.current  { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(0,51,102,.15); }
 
     /* ── Timeout Modal ── */
     .timeout-modal {
@@ -110,7 +85,7 @@
       background: #fff; border-radius: 12px; padding: 40px 36px;
       max-width: 460px; width: 90%; text-align: center; box-shadow: 0 8px 40px rgba(0,0,0,.3);
     }
-    .timeout-icon { font-size: 52px; margin-bottom: 12px; }
+    .timeout-icon  { font-size: 52px; margin-bottom: 12px; }
     .timeout-title { font-size: 22px; font-weight: 700; color: var(--red); margin-bottom: 10px; }
     .timeout-msg   { font-size: 14px; color: var(--grey-mid); margin-bottom: 24px; line-height: 1.6; }
   </style>
@@ -124,18 +99,14 @@
       <div class="header-title">Plant Incharge Situation Based Competency Assessment Engine</div>
       <div class="header-sub" id="candidateHeader">Loading...</div>
     </div>
-    <!-- Compact header timer -->
-    <div class="timer-wrap" id="timerDisplay">
-      <span>⏱</span>
-      <span id="timerText">--:--</span>
-    </div>
+    <div class="timer-wrap" id="timerDisplay"><span>⏱</span><span id="timerText">--:--</span></div>
   </div>
 </header>
 
-<!-- Question Palette -->
+<!-- Q-dot palette -->
 <div class="q-palette" id="qPalette"></div>
 
-<!-- Progress Bar -->
+<!-- Progress -->
 <div class="progress-wrap">
   <div class="progress-top-row">
     <span id="progressLabel" style="font-size:13px;font-weight:600;color:var(--blue);">Question 1 of 30</span>
@@ -148,17 +119,15 @@
 
 <div class="container">
   <div class="card" id="questionCard">
-    <!-- Q number only — NO competency shown to candidate -->
+    <!-- Q number only – competency deliberately hidden from candidate -->
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
       <span class="q-num-display" id="qNumDisplay" style="font-size:16px;">Q1 / 30</span>
       <span id="savedIndicator" class="saved-indicator">✓ Answer saved</span>
     </div>
 
-    <!-- Situation -->
     <div class="situation-label">SITUATION</div>
     <div class="situation-box" id="situationBox">Loading situation...</div>
 
-    <!-- Input Mode Toggle -->
     <div style="margin-bottom:14px;">
       <div class="input-mode-toggle">
         <button class="mode-btn active" id="typeBtn" onclick="setMode('type')">✍️ Type Response</button>
@@ -183,7 +152,7 @@
         ⚠️ Voice input not supported in your browser. Please use Chrome or Edge.
       </p>
       <button class="mic-btn" id="micBtn" title="Click to start/stop recording">
-        <svg class="mic-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <svg class="mic-icon" viewBox="0 0 24 24">
           <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
           <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
           <line x1="12" y1="19" x2="12" y2="23"/>
@@ -195,14 +164,13 @@
       <button class="btn btn-outline btn-sm" onclick="clearVoice()">🗑️ Clear</button>
     </div>
 
-    <!-- Navigation -->
     <div class="q-nav">
       <button class="btn btn-outline" id="prevBtn" onclick="navigate(-1)">← Previous</button>
       <button class="btn btn-primary" id="nextBtn" onclick="navigate(1)">Next Question →</button>
     </div>
   </div>
 
-  <!-- Submit All -->
+  <!-- Submit section (last question) -->
   <div id="submitSection" style="display:none; text-align:center;">
     <div class="card">
       <div class="card-title">🏁 Ready to Submit</div>
@@ -220,22 +188,14 @@
   </div>
 </div>
 
-<!-- Circular Timer (fixed, right side) -->
+<!-- Circular Timer -->
 <div class="circle-timer-wrap" id="circleTimerWrap">
   <svg class="circle-timer-svg" viewBox="0 0 120 120">
-    <!-- White background disc -->
     <circle cx="60" cy="60" r="56" fill="white"/>
-    <!-- Track -->
     <circle cx="60" cy="60" r="50" fill="none" stroke="#e8ecf0" stroke-width="9"/>
-    <!-- Progress arc — rotated so it starts at 12 o'clock -->
-    <circle id="circleArc"
-            cx="60" cy="60" r="50"
-            fill="none"
-            stroke="#22c55e"
-            stroke-width="9"
-            stroke-linecap="round"
-            stroke-dasharray="314.16"
-            stroke-dashoffset="0"
+    <circle id="circleArc" cx="60" cy="60" r="50" fill="none"
+            stroke="#22c55e" stroke-width="9" stroke-linecap="round"
+            stroke-dasharray="314.16" stroke-dashoffset="0"
             transform="rotate(-90 60 60)"/>
   </svg>
   <div class="circle-timer-inner">
@@ -248,12 +208,12 @@
 <div class="scoring-overlay" id="scoringOverlay">
   <div class="scoring-box">
     <div class="spinner"></div>
-    <div class="scoring-title">Evaluating Responses</div>
-    <div class="scoring-sub">AI engine is scoring your answers…<br/>Please do not close this tab.</div>
+    <div class="scoring-title">Evaluating Your Responses</div>
+    <div class="scoring-sub" id="scoringSub">AI engine is processing your answers…<br/>Please do not close this tab.</div>
     <div class="progress-bar-outer" style="max-width:300px; margin:12px auto;">
       <div class="progress-bar-inner" id="scoringBar" style="width:0%; background:var(--gold);"></div>
     </div>
-    <div id="scoringProgressText" style="font-size:13px;color:#ccc;margin-top:8px;">Initialising...</div>
+    <div id="scoringProgressText" style="font-size:13px;color:#ccc;margin-top:8px;">Submitting…</div>
   </div>
 </div>
 
@@ -264,8 +224,7 @@
     <div class="timeout-title">Time's Up!</div>
     <div class="timeout-msg" id="timeoutMsg">
       Your assessment time has expired.<br/>
-      Your answered questions will now be submitted automatically.<br/>
-      Unanswered questions will be scored as zero.
+      Your answered questions will now be submitted automatically.
     </div>
     <button class="btn btn-primary" onclick="forceSubmit()">Submit Now →</button>
   </div>
@@ -285,24 +244,26 @@ document.getElementById('candidateHeader').textContent =
 
 let currentIdx   = 0;
 let voiceMode    = false;
-let recognition  = null;
 let isRecording  = false;
-let stoppedManually = false;
+
+// voice state — one recognition object per question, destroyed on navigate
+let recognition     = null;
 let voiceTranscriptFull = '';
-let assessmentMinutes   = 60;
-let timerInterval = null;
-let timerExpired  = false;
+let capturedSrtId   = null;   // srt_id the current recognition was opened for
+let stoppedManually = false;
+
+let assessmentMinutes = 60;
+let timerInterval     = null;
+let timerExpired      = false;
 let totalTimerSeconds = 0;
+const CIRC = 2 * Math.PI * 50;  // circumference for r=50
 
-// Circumference for r=50: 2π×50 ≈ 314.16
-const CIRC = 2 * Math.PI * 50;
-
-// ─── Load config & start ──────────────────────────────────────────────────────
+// ─── Boot ─────────────────────────────────────────────────────────────────────
 (async () => {
   try {
     const cfg = await fetch('/api/config').then(r => r.json());
     assessmentMinutes = cfg.assessment_minutes || 60;
-  } catch {}
+  } catch (_) {}
   totalTimerSeconds = assessmentMinutes * 60;
   startTimer(totalTimerSeconds);
   buildPalette();
@@ -314,58 +275,33 @@ function updateCircleTimer(remaining, total) {
   const arc  = document.getElementById('circleArc');
   const val  = document.getElementById('circleTimeVal');
   const wrap = document.getElementById('circleTimerWrap');
-  if (!arc || !val) return;
-
-  const ratio  = Math.max(0, remaining / total);
-  arc.style.strokeDashoffset = CIRC * (1 - ratio);
-
-  let color;
-  if      (remaining <= 60)  { color = '#ef4444'; }   // red   – 1 min left
-  else if (remaining <= 300) { color = '#f97316'; }   // orange – 5 min left
-  else                       { color = '#22c55e'; }   // green
-
+  if (!arc) return;
+  arc.style.strokeDashoffset = CIRC * (1 - Math.max(0, remaining / total));
+  const color = remaining <= 60 ? '#ef4444' : remaining <= 300 ? '#f97316' : '#22c55e';
   arc.style.stroke = color;
-
-  const m = Math.floor(remaining / 60);
-  const s = remaining % 60;
-  val.textContent = `${pad(m)}:${pad(s)}`;
-  val.style.color = remaining <= 60 ? '#ef4444' : remaining <= 300 ? '#f97316' : 'var(--blue)';
-
+  val.style.color  = remaining <= 60 ? '#ef4444' : remaining <= 300 ? '#f97316' : 'var(--blue)';
+  val.textContent  = `${pad(Math.floor(remaining / 60))}:${pad(remaining % 60)}`;
   wrap.classList.toggle('crit', remaining <= 60);
 }
 
-// ─── Header Timer ─────────────────────────────────────────────────────────────
-function startTimer(totalSeconds) {
-  let remaining = totalSeconds;
-  const el   = document.getElementById('timerText');
-  const wrap = document.getElementById('timerDisplay');
-
-  // Initial render
-  updateCircleTimer(remaining, totalSeconds);
-
+function startTimer(total) {
+  let rem = total;
+  updateCircleTimer(rem, total);
   timerInterval = setInterval(() => {
-    if (remaining <= 0) {
+    if (rem <= 0) {
       clearInterval(timerInterval);
       timerExpired = true;
-      el.textContent = '00:00';
-      updateCircleTimer(0, totalSeconds);
+      updateCircleTimer(0, total);
       onTimerExpired();
       return;
     }
-    remaining--;
-
-    const h = Math.floor(remaining / 3600);
-    const m = Math.floor((remaining % 3600) / 60);
-    const s = remaining % 60;
-    el.textContent = h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
-
-    // Header badge colours
-    wrap.classList.remove('warn', 'crit');
-    if      (remaining <= 60)  wrap.classList.add('crit');
-    else if (remaining <= 300) wrap.classList.add('warn');
-
-    // Circular timer
-    updateCircleTimer(remaining, totalSeconds);
+    rem--;
+    const m = Math.floor(rem / 60), s = rem % 60;
+    document.getElementById('timerText').textContent = `${pad(m)}:${pad(s)}`;
+    const wrap = document.getElementById('timerDisplay');
+    wrap.classList.toggle('warn', rem <= 300 && rem > 60);
+    wrap.classList.toggle('crit', rem <= 60);
+    updateCircleTimer(rem, total);
   }, 1000);
 }
 
@@ -373,15 +309,14 @@ function pad(n) { return String(n).padStart(2, '0'); }
 
 function onTimerExpired() {
   saveCurrentAnswer();
-  const answered   = questions.filter(q => answers[q.srt_id] && answers[q.srt_id].trim()).length;
+  const answered   = questions.filter(q => answers[q.srt_id]?.trim()).length;
   const unanswered = questions.length - answered;
   document.getElementById('timeoutMsg').innerHTML =
     `Your assessment time has expired.<br/>` +
-    `<strong>${answered}</strong> question(s) answered. ` +
-    `<strong>${unanswered}</strong> unanswered question(s) will be scored as zero.`;
+    `<strong>${answered}</strong> question(s) answered · ` +
+    `<strong>${unanswered}</strong> unanswered (scored as zero).`;
   document.getElementById('timeoutModal').classList.add('show');
 }
-
 function forceSubmit() {
   document.getElementById('timeoutModal').classList.remove('show');
   submitAssessment();
@@ -396,18 +331,16 @@ function buildPalette() {
     dot.className = 'q-dot' + (i === 0 ? ' current' : '');
     dot.id = `dot-${i}`;
     dot.textContent = i + 1;
-    dot.title = `Question ${i + 1}`;
-    dot.onclick = () => { saveCurrentAnswer(); currentIdx = i; renderQuestion(i); };
+    dot.onclick = () => { saveCurrentAnswer(); destroyVoice(); currentIdx = i; renderQuestion(i); };
     pal.appendChild(dot);
   });
 }
-
 function updatePalette() {
   questions.forEach((q, i) => {
     const dot = document.getElementById(`dot-${i}`);
     if (!dot) return;
     dot.className = 'q-dot';
-    if (answers[q.srt_id] && answers[q.srt_id].trim()) dot.classList.add('answered');
+    if (answers[q.srt_id]?.trim()) dot.classList.add('answered');
     if (i === currentIdx) dot.classList.add('current');
   });
 }
@@ -417,19 +350,21 @@ function renderQuestion(idx) {
   const q = questions[idx];
   if (!q) return;
 
-  // Situation shown — competency deliberately hidden from candidate
+  // Kill any active voice recognition before rendering new question
+  destroyVoice();
+
   document.getElementById('situationBox').textContent  = q.situation;
   document.getElementById('qNumDisplay').textContent   = `Q${idx + 1} / ${questions.length}`;
   document.getElementById('progressLabel').textContent = `Question ${idx + 1} of ${questions.length}`;
   document.getElementById('progressBar').style.width   = `${((idx + 1) / questions.length) * 100}%`;
 
-  const nAnswered = questions.filter(q => answers[q.srt_id] && answers[q.srt_id].trim()).length;
-  document.getElementById('answeredCount').textContent = `${nAnswered} answered`;
+  const nAns = questions.filter(q => answers[q.srt_id]?.trim()).length;
+  document.getElementById('answeredCount').textContent = `${nAns} answered`;
 
   const saved = answers[q.srt_id] || '';
   document.getElementById('responseText').value = saved;
+  voiceTranscriptFull = saved;   // reset transcript to saved answer (or empty)
   document.getElementById('voiceTranscript').textContent = saved || 'Your spoken response will appear here...';
-  voiceTranscriptFull = saved;
   updateCharCount();
 
   document.getElementById('prevBtn').disabled = (idx === 0);
@@ -437,20 +372,21 @@ function renderQuestion(idx) {
   document.getElementById('nextBtn').textContent = isLast ? 'Review & Submit →' : 'Next Question →';
 
   if (isLast) {
-    const nAns = questions.filter(q => answers[q.srt_id] && answers[q.srt_id].trim()).length;
     document.getElementById('answeredFinal').textContent = nAns;
     document.getElementById('submitSection').style.display = 'block';
   } else {
     document.getElementById('submitSection').style.display = 'none';
   }
 
-  stopVoice();
+  // Re-wire mic button for the new question
+  document.getElementById('micBtn').onclick = toggleVoice;
   updatePalette();
 }
 
 // ─── Navigation ───────────────────────────────────────────────────────────────
 function navigate(dir) {
-  saveCurrentAnswer();
+  saveCurrentAnswer();          // save BEFORE destroying voice
+  destroyVoice();               // hard-stop recognition so no late onresult fires
   const next = currentIdx + dir;
   if (next >= 0 && next < questions.length) {
     currentIdx = next;
@@ -460,6 +396,7 @@ function navigate(dir) {
 
 function saveCurrentAnswer() {
   const q    = questions[currentIdx];
+  if (!q) return;
   const text = voiceMode
     ? voiceTranscriptFull.trim()
     : document.getElementById('responseText').value.trim();
@@ -470,12 +407,12 @@ function saveCurrentAnswer() {
     ind.classList.add('show');
     setTimeout(() => ind.classList.remove('show'), 1500);
     updatePalette();
-    const nAnswered = questions.filter(q => answers[q.srt_id] && answers[q.srt_id].trim()).length;
-    document.getElementById('answeredCount').textContent = `${nAnswered} answered`;
+    const nAns = questions.filter(q => answers[q.srt_id]?.trim()).length;
+    document.getElementById('answeredCount').textContent = `${nAns} answered`;
   }
 }
 
-// ─── Input Mode Toggle ────────────────────────────────────────────────────────
+// ─── Mode Toggle ─────────────────────────────────────────────────────────────
 function setMode(mode) {
   saveCurrentAnswer();
   voiceMode = (mode === 'voice');
@@ -483,25 +420,42 @@ function setMode(mode) {
   document.getElementById('voiceBtn').classList.toggle('active',  voiceMode);
   document.getElementById('typePanel').style.display = voiceMode ? 'none' : 'block';
   document.getElementById('voicePanel').classList.toggle('show', voiceMode);
-  if (voiceMode) initVoice();
+  // Don't auto-start voice — let user click mic
 }
 
 document.getElementById('responseText').addEventListener('input', () => {
   updateCharCount();
   debounce(() => saveCurrentAnswer(), 800)();
 });
-
 function updateCharCount() {
   document.getElementById('charCount').textContent =
     document.getElementById('responseText').value.length + ' characters';
 }
+let _dt;
+function debounce(fn, d) { return () => { clearTimeout(_dt); _dt = setTimeout(fn, d); }; }
 
-let debounceTimer;
-function debounce(fn, delay) {
-  return () => { clearTimeout(debounceTimer); debounceTimer = setTimeout(fn, delay); };
+// ─── Voice — Hard-destroy on navigation, fresh create per question ────────────
+
+/**
+ * Completely destroy the current recognition instance.
+ * Called on every navigation to prevent onresult firing for the wrong question.
+ */
+function destroyVoice() {
+  if (recognition) {
+    recognition.onresult = null;
+    recognition.onerror  = null;
+    recognition.onend    = null;
+    recognition.onstart  = null;
+    try { recognition.abort(); } catch (_) {}
+    recognition = null;
+  }
+  isRecording     = false;
+  stoppedManually = false;
+  capturedSrtId   = null;
+  setMicVisual(false);
+  document.getElementById('voiceStatus').textContent = 'Click the microphone to start speaking';
 }
 
-// ─── Voice (Web Speech API) — with abort-error fix ───────────────────────────
 function initVoice() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) {
@@ -510,18 +464,26 @@ function initVoice() {
     return;
   }
 
-  // Re-create recognition each time to avoid stale state
-  if (recognition) {
-    try { recognition.abort(); } catch (_) {}
-  }
+  // Always create a fresh instance per question
+  destroyVoice();
+
+  // Lock in the srt_id for THIS question — results must only go to this question
+  capturedSrtId = questions[currentIdx]?.srt_id;
+  if (!capturedSrtId) return;
 
   recognition = new SR();
-  recognition.lang            = 'en-IN';
-  recognition.continuous      = true;
-  recognition.interimResults  = true;
-  recognition.maxAlternatives = 1;
+  recognition.lang           = 'en-IN';
+  recognition.continuous     = true;
+  recognition.interimResults = true;
+
+  recognition.onstart = () => {
+    document.getElementById('voiceStatus').textContent = '🔴 Recording… Click mic to stop';
+  };
 
   recognition.onresult = (e) => {
+    // Guard: ignore if we've navigated away from the question this recognition was opened for
+    if (capturedSrtId !== questions[currentIdx]?.srt_id) return;
+
     let interim = '', final = voiceTranscriptFull;
     for (let i = e.resultIndex; i < e.results.length; i++) {
       if (e.results[i].isFinal) final += e.results[i][0].transcript + ' ';
@@ -531,63 +493,63 @@ function initVoice() {
     const combined = (final + interim).trim();
     document.getElementById('voiceTranscript').textContent = combined || 'Your spoken response will appear here...';
     document.getElementById('responseText').value = combined;
-    saveCurrentAnswer();
+    // Save immediately — with the correct question's srt_id
+    if (combined) {
+      answers[capturedSrtId] = combined;
+      sessionStorage.setItem('rdc_answers', JSON.stringify(answers));
+      updatePalette();
+    }
   };
 
   recognition.onerror = (e) => {
-    // 'aborted' fires whenever stop() is called — not a real error, safely ignore
-    if (e.error === 'aborted') return;
-    // 'no-speech' is also benign — just show a gentle message
+    if (e.error === 'aborted') return;           // fired by our own stop() — not a real error
     if (e.error === 'no-speech') {
       document.getElementById('voiceStatus').textContent = 'No speech detected — click mic and try again.';
       return;
     }
     document.getElementById('voiceStatus').textContent = '⚠️ ' + e.error + ' — please try again.';
-    setRecordingState(false);
-  };
-
-  recognition.onstart = () => {
-    document.getElementById('voiceStatus').textContent = '🔴 Recording… Click mic to stop';
+    setMicVisual(false);
+    isRecording = false;
   };
 
   recognition.onend = () => {
-    // Auto-restart only if user did NOT manually stop
     if (isRecording && !stoppedManually) {
+      // Auto-restart to keep continuous recording
       try { recognition.start(); } catch (_) {}
     } else {
-      setRecordingState(false);
+      isRecording = false;
+      setMicVisual(false);
       document.getElementById('voiceStatus').textContent = 'Click the microphone to start speaking';
     }
   };
-
-  document.getElementById('micBtn').onclick = toggleVoice;
 }
 
 function toggleVoice() { isRecording ? stopVoice() : startVoice(); }
 
 function startVoice() {
-  if (!recognition) initVoice();
+  initVoice();   // fresh recognition each start
+  if (!recognition) return;
   stoppedManually = false;
   try {
     recognition.start();
-    setRecordingState(true);
+    isRecording = true;
+    setMicVisual(true);
   } catch (e) {
-    // Already started — safe to ignore
-    console.warn('Voice start error (ignored):', e.message);
+    console.warn('Voice start error:', e.message);
   }
 }
 
 function stopVoice() {
   stoppedManually = true;
-  if (recognition && isRecording) {
+  isRecording = false;
+  setMicVisual(false);
+  document.getElementById('voiceStatus').textContent = 'Click the microphone to start speaking';
+  if (recognition) {
     try { recognition.stop(); } catch (_) {}
   }
-  setRecordingState(false);
-  document.getElementById('voiceStatus').textContent = 'Click the microphone to start speaking';
 }
 
-function setRecordingState(state) {
-  isRecording = state;
+function setMicVisual(state) {
   document.getElementById('micBtn').classList.toggle('recording', state);
 }
 
@@ -597,65 +559,84 @@ function clearVoice() {
   document.getElementById('voiceTranscript').textContent = 'Your spoken response will appear here...';
   document.getElementById('responseText').value = '';
   const q = questions[currentIdx];
-  delete answers[q.srt_id];
-  sessionStorage.setItem('rdc_answers', JSON.stringify(answers));
+  if (q) { delete answers[q.srt_id]; sessionStorage.setItem('rdc_answers', JSON.stringify(answers)); }
   updatePalette();
 }
 
-// ─── Submit Assessment ────────────────────────────────────────────────────────
+// ─── Submit Assessment — single POST + polling ────────────────────────────────
 async function submitAssessment() {
-  if (timerInterval) { clearInterval(timerInterval); }
+  if (timerInterval) clearInterval(timerInterval);
   saveCurrentAnswer();
+  destroyVoice();
 
-  const overlay = document.getElementById('scoringOverlay');
-  overlay.classList.add('show');
-
+  const overlay      = document.getElementById('scoringOverlay');
   const progressText = document.getElementById('scoringProgressText');
   const scoringBar   = document.getElementById('scoringBar');
-  let scored = 0;
-  const total = questions.length;
+  overlay.classList.add('show');
 
-  for (const q of questions) {
-    const transcript = answers[q.srt_id] || '';
-    progressText.textContent = `Scoring Q${q.question_number} / ${total}…`;
-    scoringBar.style.width   = `${(scored / total) * 100}%`;
-    try {
-      await fetch('/api/score-question', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          session_id:           sessionId,
-          srt_id:               q.srt_id,
-          situation:            q.situation,
-          primary_competency:   q.primary_competency,
-          secondary_competency: q.secondary_competency,
-          candidate_transcript: transcript,
-        }),
-      });
-    } catch (err) { console.warn('Score error for', q.srt_id, err); }
-    scored++;
-  }
-
-  scoringBar.style.width = '95%';
-  progressText.textContent = 'Generating final report…';
+  progressText.textContent = 'Submitting your responses…';
+  scoringBar.style.width   = '5%';
 
   try {
-    const res  = await fetch('/api/final-report', {
+    // ── Send ALL answers in a single request — returns instantly ──
+    const res = await fetch('/api/submit-all', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ session_id: sessionId }),
+      body:    JSON.stringify({ session_id: sessionId, answers }),
     });
-    const data = await res.json();
-    sessionStorage.setItem('rdc_report', JSON.stringify(data));
-    scoringBar.style.width = '100%';
-    progressText.textContent = 'Complete! Redirecting…';
-    // Candidate goes to THANK-YOU — report is admin-only
-    setTimeout(() => { window.location.href = '/thank-you'; }, 800);
+    if (!res.ok) throw new Error(await res.text());
+
+    const { total } = await res.json();
+    progressText.textContent = 'Scoring in progress…';
+
+    // ── Poll until backend signals completion ──
+    await pollUntilDone(total, progressText, scoringBar);
+
   } catch (err) {
     overlay.classList.remove('show');
-    alert('Error generating report: ' + err.message);
+    alert('Submission error: ' + err.message + '\n\nPlease try submitting again.');
   }
 }
+
+async function pollUntilDone(total, progressText, scoringBar) {
+  const MAX_POLLS = 120;   // 120 × 3s = 6 minutes max wait
+  for (let attempt = 0; attempt < MAX_POLLS; attempt++) {
+    await sleep(3000);
+    try {
+      const res  = await fetch(`/api/submission-status/${sessionId}`);
+      const data = await res.json();
+      const { status, progress, error } = data;
+
+      if (status === 'completed') {
+        scoringBar.style.width   = '100%';
+        progressText.textContent = 'Complete! Redirecting…';
+        setTimeout(() => { window.location.href = '/thank-you'; }, 600);
+        return;
+      }
+
+      if (status === 'failed') {
+        throw new Error(error || 'Processing failed on server');
+      }
+
+      // Update progress bar
+      const pct = Math.min(95, 5 + ((progress / (total || 30)) * 85));
+      scoringBar.style.width = pct + '%';
+      if (progress < (total || 30)) {
+        progressText.textContent = `Scoring response ${progress} of ${total || 30}…`;
+      } else {
+        progressText.textContent = 'Generating final report…';
+      }
+
+    } catch (err) {
+      if (err.message.includes('failed on server')) throw err;
+      // Network hiccup — keep polling silently
+      console.warn('Poll error (will retry):', err.message);
+    }
+  }
+  throw new Error('Assessment processing timed out. Please contact HR.');
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 </script>
 
 </body>
