@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Assessment Submitted – RDC</title>
+  <link rel="stylesheet" href="/static/style.css"/>
+  <style>
+    body { background: var(--blue-light); }
+    .ty-wrap {
+      min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; padding: 24px;
+    }
+    .ty-card {
+      background: #fff; border-radius: 16px;
+      box-shadow: 0 8px 40px rgba(0,51,102,.12);
+      max-width: 560px; width: 100%; padding: 52px 48px;
+      text-align: center;
+    }
+    .ty-logo {
+      font-size: 13px; font-weight: 800; letter-spacing: 4px;
+      color: var(--blue); background: var(--blue-light);
+      padding: 6px 18px; border-radius: 20px;
+      display: inline-block; margin-bottom: 28px;
+    }
+    .ty-checkmark {
+      width: 80px; height: 80px; border-radius: 50%;
+      background: linear-gradient(135deg, #1a7a1a, #2ea82e);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 28px; font-size: 38px;
+      box-shadow: 0 4px 20px rgba(26,122,26,.3);
+    }
+    .ty-title {
+      font-size: 26px; font-weight: 800; color: var(--blue);
+      margin-bottom: 12px; line-height: 1.2;
+    }
+    .ty-sub {
+      font-size: 15px; color: #555; line-height: 1.7; margin-bottom: 28px;
+    }
+    .ty-divider {
+      height: 3px;
+      background: linear-gradient(to right, var(--blue), var(--gold));
+      border-radius: 2px; margin: 28px 0;
+    }
+    .ty-notice {
+      background: var(--blue-light); border-radius: 10px;
+      padding: 18px 20px; font-size: 14px; color: var(--blue);
+      font-weight: 600; margin-bottom: 32px; line-height: 1.6;
+    }
+    .ty-close-btn {
+      background: var(--blue); color: #fff;
+      border: none; border-radius: 8px;
+      padding: 14px 40px; font-size: 15px; font-weight: 700;
+      cursor: pointer; letter-spacing: .5px;
+      transition: background .2s, transform .1s;
+    }
+    .ty-close-btn:hover { background: #002244; transform: translateY(-1px); }
+    .ty-footer {
+      font-size: 11px; color: #aaa; margin-top: 28px;
+      letter-spacing: .5px;
+    }
+    .candidate-info {
+      display: flex; gap: 10px; justify-content: center;
+      flex-wrap: wrap; margin-bottom: 20px;
+    }
+    .ci-chip {
+      background: var(--blue-light); border-radius: 20px;
+      padding: 5px 14px; font-size: 13px; color: var(--blue); font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+<div class="ty-wrap">
+  <div class="ty-card">
+    <div class="ty-logo">RDC CONCRETE</div>
+    <div class="ty-checkmark">✓</div>
+    <div class="ty-title">Assessment Submitted Successfully</div>
+
+    <div class="candidate-info" id="candidateInfo"></div>
+
+    <div class="ty-sub">
+      Thank you for completing the <strong>Plant Incharge SRT Assessment</strong>.
+      Your responses have been recorded and submitted to the evaluation system.
+    </div>
+
+    <div class="ty-divider"></div>
+
+    <div class="ty-notice">
+      📋 &nbsp;Your results will be reviewed by the HR team.<br/>
+      We will revert back to you with the outcome shortly.
+    </div>
+
+    <button class="ty-close-btn" onclick="closeWindow()">
+      Close This Window
+    </button>
+
+    <div class="ty-footer">
+      RDC Plant Incharge – SRT Assessment Engine &nbsp;|&nbsp; Confidential
+    </div>
+  </div>
+</div>
+
+<script>
+  // Show candidate info
+  const candidate = JSON.parse(sessionStorage.getItem('rdc_candidate') || '{}');
+  const info = document.getElementById('candidateInfo');
+  if (candidate.candidate_name) {
+    info.innerHTML = `
+      <div class="ci-chip">👤 ${candidate.candidate_name}</div>
+      <div class="ci-chip">🏭 ${candidate.plant_location || ''}</div>
+      <div class="ci-chip">📅 ${candidate.assessment_date || ''}</div>
+    `;
+  }
+
+  // Clear sensitive session data from browser
+  sessionStorage.removeItem('rdc_questions');
+  sessionStorage.removeItem('rdc_answers');
+  // Keep session_id & candidate briefly, then clear
+  setTimeout(() => {
+    sessionStorage.clear();
+  }, 3000);
+
+  function closeWindow() {
+    // Try to close tab; if blocked, redirect to a blank page
+    window.open('', '_self');
+    window.close();
+    // Fallback: replace with blank page
+    setTimeout(() => { window.location.href = 'about:blank'; }, 300);
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Admin Panel – RDC SRT Assessment</title>
+  <link rel="stylesheet" href="/static/style.css"/>
+  <style>
+    body { background: #f0f3f8; }
+
+    /* ── Login ── */
+    .login-wrap {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    }
+    .login-card {
+      background: #fff; border-radius: 14px; padding: 48px 40px;
+      box-shadow: 0 8px 40px rgba(0,51,102,.12); max-width: 400px; width: 100%;
+      text-align: center;
+    }
+    .login-logo { font-size: 13px; font-weight: 800; letter-spacing: 4px; color: var(--blue);
+      background: var(--blue-light); padding: 6px 18px; border-radius: 20px;
+      display: inline-block; margin-bottom: 24px; }
+    .login-title { font-size: 22px; font-weight: 700; color: var(--blue); margin-bottom: 8px; }
+    .login-sub   { font-size: 13px; color: var(--grey-mid); margin-bottom: 28px; }
+    .login-err   { color: var(--red); font-size: 13px; margin-top: 10px; min-height: 18px; }
+
+    /* ── Dashboard ── */
+    #dashboard { display: none; }
+
+    .dash-header {
+      background: var(--blue); color: #fff;
+      padding: 14px 28px; display: flex; align-items: center;
+      justify-content: space-between; gap: 16px;
+    }
+    .dash-header h1 { font-size: 17px; font-weight: 700; margin: 0; }
+    .dash-header .sub { font-size: 12px; opacity: .75; }
+    .dash-logout { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.3);
+      color: #fff; padding: 6px 16px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+    .dash-logout:hover { background: rgba(255,255,255,.25); }
+
+    /* Stats row */
+    .stats-row {
+      display: flex; gap: 14px; flex-wrap: wrap; padding: 20px 24px 0;
+    }
+    .stat-card {
+      background: #fff; border-radius: 10px; padding: 16px 24px; flex: 1; min-width: 140px;
+      box-shadow: 0 2px 10px rgba(0,51,102,.07); text-align: center;
+    }
+    .stat-num   { font-size: 28px; font-weight: 800; color: var(--blue); }
+    .stat-label { font-size: 12px; color: var(--grey-mid); margin-top: 2px; }
+
+    /* Toolbar */
+    .toolbar {
+      display: flex; gap: 10px; align-items: center;
+      padding: 16px 24px; flex-wrap: wrap;
+    }
+    .toolbar input {
+      padding: 8px 14px; border: 1px solid #d0d9e6; border-radius: 7px;
+      font-size: 13px; width: 220px;
+    }
+    .btn-refresh { background: var(--blue-light); color: var(--blue); border: none;
+      padding: 8px 16px; border-radius: 7px; cursor: pointer; font-size: 13px; font-weight: 600; }
+    .btn-refresh:hover { background: #d0ddf0; }
+
+    /* Table */
+    .table-wrap { padding: 0 24px 24px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; background: #fff;
+      border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,51,102,.07); }
+    thead th {
+      background: var(--blue); color: #fff; font-size: 12px; font-weight: 700;
+      padding: 12px 14px; text-align: left; letter-spacing: .5px; text-transform: uppercase;
+    }
+    tbody tr { border-bottom: 1px solid #eef1f6; transition: background .15s; }
+    tbody tr:hover { background: var(--blue-light); }
+    tbody td { padding: 11px 14px; font-size: 13px; color: #333; vertical-align: middle; }
+    tbody tr:last-child { border-bottom: none; }
+
+    /* Status badges */
+    .badge-completed  { background:#d4edda; color:#155724; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:700; }
+    .badge-progress   { background:#fff3cd; color:#856404; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:700; }
+
+    /* Readiness colors */
+    .ready-high { color: #1a7a1a; font-weight: 700; }
+    .ready-mid  { color: #cc7700; font-weight: 700; }
+    .ready-low  { color: #cc0000; font-weight: 700; }
+
+    /* Action buttons */
+    .btn-view { background: var(--blue); color: #fff; border: none; padding: 5px 12px;
+      border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; }
+    .btn-view:hover { background: #002244; }
+    .btn-pdf  { background: var(--gold); color: #fff; border: none; padding: 5px 12px;
+      border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; margin-left: 6px; }
+    .btn-pdf:hover { background: #a5780a; }
+    .btn-pdf.disabled { background: #ccc; cursor: not-allowed; }
+
+    /* Empty state */
+    .empty-state { text-align: center; padding: 48px 24px; color: var(--grey-mid); }
+    .empty-icon  { font-size: 40px; margin-bottom: 12px; }
+
+    /* Report modal */
+    .modal-bg {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55);
+      z-index: 1000; justify-content: center; align-items: flex-start;
+      padding: 40px 16px; overflow-y: auto;
+    }
+    .modal-bg.show { display: flex; }
+    .modal-box {
+      background: #fff; border-radius: 14px; width: 100%; max-width: 860px;
+      padding: 32px; position: relative; margin: auto;
+    }
+    .modal-close {
+      position: absolute; top: 16px; right: 16px;
+      background: #f0f3f8; border: none; border-radius: 50%;
+      width: 34px; height: 34px; font-size: 18px; cursor: pointer; font-weight: 700;
+    }
+    .modal-close:hover { background: #e0e5ef; }
+    .modal-title { font-size: 18px; font-weight: 700; color: var(--blue); margin-bottom: 6px; }
+    .modal-sub   { font-size: 13px; color: var(--grey-mid); margin-bottom: 24px; }
+
+    .score-hero-sm {
+      display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 20px;
+    }
+    .score-box-sm {
+      background: var(--blue-light); border-radius: 8px; padding: 14px 20px;
+      text-align: center; flex: 1; min-width: 120px;
+    }
+    .score-box-sm .num  { font-size: 24px; font-weight: 800; color: var(--blue); }
+    .score-box-sm .lbl  { font-size: 11px; color: var(--grey-mid); margin-top: 2px; }
+
+    /* Competency table in modal */
+    .comp-modal-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 0; border-bottom: 1px solid #f0f3f8;
+    }
+    .comp-modal-name { flex: 1; font-size: 13px; color: #333; }
+    .comp-modal-bar  { flex: 2; background: #eef1f6; border-radius: 4px; height: 10px; overflow: hidden; }
+    .comp-modal-fill { height: 100%; border-radius: 4px; }
+    .comp-modal-score{ width: 40px; text-align: right; font-size: 13px; font-weight: 700; color: var(--blue); }
+  </style>
+</head>
+<body>
+
+<!-- ── LOGIN ───────────────────────────────────────────────────────────────── -->
+<div id="loginWrap" class="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">RDC CONCRETE</div>
+    <div class="login-title">Admin Panel</div>
+    <div class="login-sub">SRT Assessment Engine — Authorised Use Only</div>
+    <div class="form-group">
+      <label>Admin Password</label>
+      <input type="password" id="pwInput" placeholder="Enter admin password"
+        onkeydown="if(event.key==='Enter') doLogin()" autocomplete="current-password"/>
+    </div>
+    <button class="btn btn-primary" style="width:100%;" onclick="doLogin()">Login →</button>
+    <div class="login-err" id="loginErr"></div>
+  </div>
+</div>
+
+<!-- ── DASHBOARD ───────────────────────────────────────────────────────────── -->
+<div id="dashboard">
+
+  <div class="dash-header">
+    <div>
+      <h1>RDC – SRT Assessment Admin Panel</h1>
+      <div class="sub">Plant Incharge Competency Assessment | Confidential – Head Office Use Only</div>
+    </div>
+    <button class="dash-logout" onclick="logout()">Logout</button>
+  </div>
+
+  <div class="stats-row" id="statsRow">
+    <div class="stat-card"><div class="stat-num" id="st-total">0</div><div class="stat-label">Total Assessments</div></div>
+    <div class="stat-card"><div class="stat-num" id="st-done">0</div><div class="stat-label">Completed</div></div>
+    <div class="stat-card"><div class="stat-num" id="st-inprog">0</div><div class="stat-label">In Progress</div></div>
+    <div class="stat-card"><div class="stat-num" id="st-avg">—</div><div class="stat-label">Avg Score (/300)</div></div>
+  </div>
+
+  <div class="toolbar">
+    <input type="text" id="searchInput" placeholder="🔍 Search by name or plant…" oninput="renderTable()"/>
+    <button class="btn-refresh" onclick="loadSessions()">↻ Refresh</button>
+    <button class="btn btn-outline btn-sm" onclick="window.location.href='/'">+ New Assessment</button>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Candidate Name</th>
+          <th>Plant Location</th>
+          <th>Date</th>
+          <th>Status</th>
+          <th>Score /300</th>
+          <th>Normalised %</th>
+          <th>Readiness</th>
+          <th>Answered</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="sessionsBody"></tbody>
+    </table>
+    <div class="empty-state" id="emptyState" style="display:none;">
+      <div class="empty-icon">📋</div>
+      <div>No assessments found.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── REPORT MODAL ─────────────────────────────────────────────────────────── -->
+<div class="modal-bg" id="reportModal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-title" id="m-title">Assessment Report</div>
+    <div class="modal-sub"  id="m-sub"></div>
+
+    <div class="score-hero-sm">
+      <div class="score-box-sm"><div class="num" id="m-total">—</div><div class="lbl">Score /300</div></div>
+      <div class="score-box-sm"><div class="num" id="m-pct">—</div><div class="lbl">Normalised %</div></div>
+      <div class="score-box-sm"><div class="num" id="m-ready" style="font-size:14px;">—</div><div class="lbl">Readiness</div></div>
+    </div>
+
+    <div style="margin-bottom:16px;">
+      <strong style="font-size:13px;color:var(--blue);">Competency Scores</strong>
+      <div id="m-competencies" style="margin-top:10px;"></div>
+    </div>
+
+    <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:16px;">
+      <div style="flex:1; min-width:200px;">
+        <strong style="font-size:13px;color:var(--blue);">Top Strengths</strong>
+        <ul id="m-strengths" style="margin-top:8px; font-size:13px; color:#333; padding-left:18px;"></ul>
+      </div>
+      <div style="flex:1; min-width:200px;">
+        <strong style="font-size:13px;color:var(--blue);">Development Areas</strong>
+        <ul id="m-devareas" style="margin-top:8px; font-size:13px; color:#333; padding-left:18px;"></ul>
+      </div>
+    </div>
+
+    <div style="margin-bottom:16px;">
+      <strong style="font-size:13px;color:var(--blue);">30-60-90 Day Coaching Plan</strong>
+      <div id="m-coaching" style="margin-top:10px;"></div>
+    </div>
+
+    <div style="text-align:center; margin-top:24px;">
+      <button class="btn btn-primary" id="m-pdf-btn" onclick="downloadPdf()">⬇️ Download PDF Report</button>
+      &nbsp;
+      <button class="btn btn-outline" onclick="closeModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let adminToken   = '';
+let allSessions  = [];
+let currentSid   = '';
+
+// ─── Login ───────────────────────────────────────────────────────────────────
+async function doLogin() {
+  const pw = document.getElementById('pwInput').value;
+  document.getElementById('loginErr').textContent = '';
+  try {
+    const res = await fetch('/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw }),
+    });
+    if (!res.ok) throw new Error('Wrong password');
+    const d = await res.json();
+    adminToken = d.token;
+    localStorage.setItem('rdc_admin_token', adminToken);
+    showDashboard();
+  } catch (e) {
+    document.getElementById('loginErr').textContent = '❌ ' + e.message;
+  }
+}
+
+function logout() {
+  adminToken = '';
+  localStorage.removeItem('rdc_admin_token');
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('loginWrap').style.display = 'flex';
+}
+
+// Auto-login if token stored
+window.onload = () => {
+  const t = localStorage.getItem('rdc_admin_token');
+  if (t) { adminToken = t; showDashboard(); }
+};
+
+function showDashboard() {
+  document.getElementById('loginWrap').style.display  = 'none';
+  document.getElementById('dashboard').style.display  = 'block';
+  loadSessions();
+}
+
+// ─── Load Sessions ────────────────────────────────────────────────────────────
+async function loadSessions() {
+  try {
+    const res = await fetch('/api/admin/sessions', {
+      headers: { 'X-Admin-Token': adminToken },
+    });
+    if (res.status === 401) { logout(); return; }
+    allSessions = await res.json();
+    updateStats();
+    renderTable();
+  } catch (e) {
+    console.error('Load error', e);
+  }
+}
+
+function updateStats() {
+  const total    = allSessions.length;
+  const done     = allSessions.filter(s => s.status === 'completed').length;
+  const inprog   = total - done;
+  const scores   = allSessions.filter(s => typeof s.total_score === 'number').map(s => s.total_score);
+  const avg      = scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : '—';
+
+  document.getElementById('st-total').textContent  = total;
+  document.getElementById('st-done').textContent   = done;
+  document.getElementById('st-inprog').textContent = inprog;
+  document.getElementById('st-avg').textContent    = avg;
+}
+
+function renderTable() {
+  const q   = (document.getElementById('searchInput').value || '').toLowerCase();
+  const filtered = q
+    ? allSessions.filter(s =>
+        s.candidate_name.toLowerCase().includes(q) ||
+        s.plant_location.toLowerCase().includes(q))
+    : allSessions;
+
+  const body = document.getElementById('sessionsBody');
+  body.innerHTML = '';
+
+  if (!filtered.length) {
+    document.getElementById('emptyState').style.display = 'block';
+    return;
+  }
+  document.getElementById('emptyState').style.display = 'none';
+
+  filtered.forEach((s, i) => {
+    const isDone   = s.status === 'completed';
+    const readyCls = readinessClass(s.readiness);
+    const scoreStr = typeof s.total_score === 'number' ? s.total_score : '—';
+    const normStr  = typeof s.normalized === 'number' ? s.normalized.toFixed(1) + '%' : '—';
+
+    body.innerHTML += `
+      <tr>
+        <td>${i+1}</td>
+        <td><strong>${escHtml(s.candidate_name)}</strong></td>
+        <td>${escHtml(s.plant_location)}</td>
+        <td>${escHtml(s.assessment_date)}</td>
+        <td><span class="${isDone ? 'badge-completed' : 'badge-progress'}">${isDone ? '✅ Completed' : '⏳ In Progress'}</span></td>
+        <td style="font-weight:700;color:var(--blue);">${scoreStr}</td>
+        <td>${normStr}</td>
+        <td class="${readyCls}">${escHtml(s.readiness || '—')}</td>
+        <td>${s.questions_answered} / 30</td>
+        <td>
+          ${isDone ? `<button class="btn-view" onclick="viewReport('${s.session_id}')">👁 View</button>` : ''}
+          <button class="btn-pdf ${s.has_pdf ? '' : 'disabled'}"
+            onclick="${s.has_pdf ? `downloadPdfFor('${s.session_id}')` : ''}"
+            title="${s.has_pdf ? 'Download PDF' : 'PDF not available'}">⬇️ PDF</button>
+        </td>
+      </tr>`;
+  });
+}
+
+function readinessClass(text) {
+  const t = (text || '').toLowerCase();
+  if (t.includes('higher')) return 'ready-high';
+  if (t.includes('structured')) return 'ready-mid';
+  if (t.includes('not ready')) return 'ready-low';
+  return '';
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ─── View Report Modal ────────────────────────────────────────────────────────
+async function viewReport(sid) {
+  currentSid = sid;
+  try {
+    const res = await fetch(`/api/admin/report/${sid}`, {
+      headers: { 'X-Admin-Token': adminToken },
+    });
+    if (!res.ok) { alert('Report not available'); return; }
+    const d = await res.json();
+    populateModal(d.candidate, d.report);
+    document.getElementById('reportModal').classList.add('show');
+  } catch (e) { alert('Error loading report: ' + e.message); }
+}
+
+function populateModal(cand, r) {
+  document.getElementById('m-title').textContent =
+    `Report: ${cand.candidate_name}`;
+  document.getElementById('m-sub').textContent =
+    `${cand.plant_location}  |  ${cand.assessment_date}  |  Confidential`;
+
+  document.getElementById('m-total').textContent = r.overall_score_out_of_300 ?? '—';
+  document.getElementById('m-pct').textContent   = typeof r.normalized_score_out_of_100 === 'number'
+    ? r.normalized_score_out_of_100.toFixed(1) + '%' : '—';
+  const readEl = document.getElementById('m-ready');
+  readEl.textContent  = r.overall_readiness || '—';
+  readEl.className    = 'num ' + readinessClass(r.overall_readiness);
+
+  // Competencies
+  const cEl = document.getElementById('m-competencies');
+  cEl.innerHTML = '';
+  for (const [name, score] of Object.entries(r.competency_summary || {})) {
+    const pct = (score / 10) * 100;
+    const col = score >= 8 ? '#1a7a1a' : score >= 6 ? '#0055aa' : score >= 4 ? '#cc7700' : '#cc0000';
+    cEl.innerHTML += `
+      <div class="comp-modal-row">
+        <div class="comp-modal-name">${escHtml(name)}</div>
+        <div class="comp-modal-bar"><div class="comp-modal-fill" style="width:${pct}%;background:${col};"></div></div>
+        <div class="comp-modal-score">${Number(score).toFixed(1)}</div>
+      </div>`;
+  }
+
+  // Strengths
+  const sEl = document.getElementById('m-strengths');
+  sEl.innerHTML = (r.top_strengths || []).map(x=>`<li>${escHtml(x)}</li>`).join('');
+
+  // Dev areas
+  const dEl = document.getElementById('m-devareas');
+  dEl.innerHTML = (r.development_areas || []).map(x=>`<li>${escHtml(x)}</li>`).join('');
+
+  // Coaching
+  const coEl = document.getElementById('m-coaching');
+  const phases = [['30_days','First 30 Days','var(--blue)'],['60_days','31–60 Days','var(--gold)'],['90_days','61–90 Days','#1a7a1a']];
+  coEl.innerHTML = '';
+  for (const [key, lbl, col] of phases) {
+    const items = (r.coaching_plan_30_60_90 || {})[key] || [];
+    coEl.innerHTML += `
+      <div style="margin-bottom:10px;">
+        <div style="font-weight:700;font-size:12px;color:${col};margin-bottom:4px;">${lbl}</div>
+        <ul style="font-size:13px;color:#333;padding-left:18px;margin:0;">
+          ${items.map(x=>`<li>${escHtml(x)}</li>`).join('')}
+        </ul>
+      </div>`;
+  }
+}
+
+function closeModal() {
+  document.getElementById('reportModal').classList.remove('show');
+  currentSid = '';
+}
+
+// ─── PDF Download ─────────────────────────────────────────────────────────────
+function downloadPdf() {
+  if (currentSid) downloadPdfFor(currentSid);
+}
+
+function downloadPdfFor(sid) {
+  // Create a hidden link and click it — passing admin token via header isn't possible
+  // so we use a query-param approach for downloads
+  const url = `/api/download-pdf/${sid}`;
+  fetch(url, { headers: { 'X-Admin-Token': adminToken } })
+    .then(async res => {
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
+      return res.blob();
+    })
+    .then(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `RDC_SRT_Assessment_${sid.slice(0,8)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    })
+    .catch(e => alert('PDF Error: ' + e.message));
+}
+
+// ─── Close modal on backdrop click ───────────────────────────────────────────
+document.getElementById('reportModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+</script>
+</body>
+</html>

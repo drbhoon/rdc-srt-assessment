@@ -1,40 +1,77 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>SRT Assessment – RDC</title>
-  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/style.css"/>
   <style>
+    /* ── Timer ── */
+    .timer-wrap {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--blue); color: #fff;
+      padding: 6px 16px; border-radius: 20px;
+      font-family: monospace; font-size: 17px; font-weight: 700;
+      letter-spacing: 2px; user-select: none;
+    }
+    .timer-wrap.warn  { background: #CC7700; }
+    .timer-wrap.crit  { background: var(--red); animation: pulse-timer 1s infinite; }
+    @keyframes pulse-timer { 0%,100%{opacity:1} 50%{opacity:.6} }
+    .timer-icon { font-size: 18px; }
+
+    /* ── Progress bar area ── */
+    .progress-wrap {
+      display: flex; flex-direction: column; gap: 6px;
+      padding: 10px 20px; background: var(--blue-light);
+      border-bottom: 1px solid #dce4ef;
+    }
+    .progress-top-row {
+      display: flex; justify-content: space-between; align-items: center;
+    }
+
+    /* ── Navigation ── */
     .q-nav {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-top: 20px;
+      display: flex; justify-content: space-between; align-items: center; margin-top: 20px;
     }
-    .q-num-display {
-      font-size: 13px;
-      color: var(--grey-mid);
-      font-weight: 600;
-    }
+    .q-num-display { font-size: 13px; color: var(--grey-mid); font-weight: 600; }
     #charCount { font-size: 12px; color: var(--grey-mid); text-align: right; margin-top: 4px; }
+
     .saved-indicator {
-      display: inline-block;
-      font-size: 12px;
-      color: var(--green);
-      font-weight: 600;
-      opacity: 0;
-      transition: opacity 0.3s;
+      display: inline-block; font-size: 12px; color: var(--green);
+      font-weight: 600; opacity: 0; transition: opacity 0.3s;
     }
     .saved-indicator.show { opacity: 1; }
-    .voice-support-warn { display: none; }
-    .use-voice-btn {
-      background: none;
-      border: none;
-      cursor: pointer;
-      display: block;
-      margin: 0 auto 10px;
+
+    /* ── Q-dots palette ── */
+    .q-palette {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      padding: 14px 20px; background: #fff;
+      border-bottom: 1px solid #dce4ef;
     }
+    .q-dot {
+      width: 30px; height: 30px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; cursor: pointer;
+      border: 2px solid #dce4ef; background: #f5f7fa; color: var(--blue);
+      transition: background .2s, border-color .2s;
+    }
+    .q-dot.answered  { background: var(--green); border-color: var(--green); color:#fff; }
+    .q-dot.current   { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(0,51,102,.15); }
+    .q-dot.skipped   { background: #f0c040; border-color: #e6a800; color: #333; }
+
+    /* ── Timeout Modal ── */
+    .timeout-modal {
+      display: none; position: fixed; inset: 0; z-index: 9999;
+      background: rgba(0,0,0,.65); justify-content: center; align-items: center;
+    }
+    .timeout-modal.show { display: flex; }
+    .timeout-box {
+      background: #fff; border-radius: 12px; padding: 40px 36px;
+      max-width: 460px; width: 90%; text-align: center; box-shadow: 0 8px 40px rgba(0,0,0,.3);
+    }
+    .timeout-icon { font-size: 52px; margin-bottom: 12px; }
+    .timeout-title { font-size: 22px; font-weight: 700; color: var(--red); margin-bottom: 10px; }
+    .timeout-msg   { font-size: 14px; color: var(--grey-mid); margin-bottom: 24px; line-height: 1.6; }
   </style>
 </head>
 <body>
@@ -42,18 +79,26 @@
 <header class="header">
   <div class="header-inner">
     <div class="header-logo">RDC</div>
-    <div>
-      <div class="header-title">SRT Assessment – In Progress</div>
+    <div style="flex:1">
+      <div class="header-title">Plant Incharge – SRT Assessment</div>
       <div class="header-sub" id="candidateHeader">Loading...</div>
+    </div>
+    <!-- Timer -->
+    <div class="timer-wrap" id="timerDisplay">
+      <span class="timer-icon">⏱</span>
+      <span id="timerText">--:--</span>
     </div>
   </div>
 </header>
 
+<!-- Question Palette -->
+<div class="q-palette" id="qPalette"></div>
+
 <!-- Progress Bar -->
 <div class="progress-wrap">
-  <div class="progress-info">
-    <span id="progressLabel">Question 1 of 30</span>
-    <span id="competencyLabel" style="font-weight:600; color: var(--gold);"></span>
+  <div class="progress-top-row">
+    <span id="progressLabel" style="font-size:13px;font-weight:600;color:var(--blue);">Question 1 of 30</span>
+    <span id="answeredCount" style="font-size:12px;color:var(--grey-mid);"></span>
   </div>
   <div class="progress-bar-outer">
     <div class="progress-bar-inner" id="progressBar" style="width:3.3%"></div>
@@ -62,12 +107,11 @@
 
 <div class="container">
   <div class="card" id="questionCard">
-    <!-- Question header -->
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-      <span class="badge" id="primaryBadge">Competency</span>
-      <span class="q-num-display" id="qNumDisplay">Q1 / 30</span>
+    <!-- Header row: just Q number, NO competency label -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+      <span class="q-num-display" id="qNumDisplay" style="font-size:16px;">Q1 / 30</span>
+      <span id="savedIndicator" class="saved-indicator">✓ Answer saved</span>
     </div>
-    <div class="secondary-badge" id="secondaryBadge" style="font-size:12px; color:var(--grey-mid); margin-bottom:14px;"></div>
 
     <!-- Situation -->
     <div class="situation-label">SITUATION</div>
@@ -85,14 +129,16 @@
     <div id="typePanel">
       <div class="form-group">
         <label>Your Response</label>
-        <textarea id="responseText" placeholder="Describe what you would do in this situation. Be specific — mention actions, root causes, data, people involved, and preventive measures." rows="6"></textarea>
+        <textarea id="responseText"
+          placeholder="Describe what you would do in this situation. Be specific — mention actions, root causes, data, people involved, and preventive measures."
+          rows="6"></textarea>
         <div id="charCount">0 characters</div>
       </div>
     </div>
 
     <!-- Voice Panel -->
     <div class="voice-panel" id="voicePanel">
-      <p class="alert alert-info voice-support-warn" id="voiceWarn">
+      <p class="alert alert-info" id="voiceWarn" style="display:none;">
         ⚠️ Voice input not supported in your browser. Please use Chrome or Edge.
       </p>
       <button class="mic-btn" id="micBtn" title="Click to start/stop recording">
@@ -108,11 +154,6 @@
       <button class="btn btn-outline btn-sm" onclick="clearVoice()">🗑️ Clear</button>
     </div>
 
-    <!-- Saved Indicator -->
-    <div style="margin-top: 6px;">
-      <span class="saved-indicator" id="savedIndicator">✓ Answer saved</span>
-    </div>
-
     <!-- Navigation -->
     <div class="q-nav">
       <button class="btn btn-outline" id="prevBtn" onclick="navigate(-1)">← Previous</button>
@@ -123,12 +164,16 @@
   <!-- Submit All -->
   <div id="submitSection" style="display:none; text-align:center;">
     <div class="card">
-      <div class="card-title">🏁 All 30 Questions Answered!</div>
-      <p style="font-size:14px; color:var(--grey-mid); margin-bottom:20px;">
-        Click below to submit your assessment. Your responses will be evaluated by the AI engine and a full competency report will be generated.
+      <div class="card-title">🏁 Ready to Submit</div>
+      <p style="font-size:14px; color:var(--grey-mid); margin-bottom:6px;">
+        You have answered <strong id="answeredFinal">0</strong> of 30 questions.
+        Unanswered questions will be scored as zero.
+      </p>
+      <p style="font-size:13px; color:var(--grey-mid); margin-bottom:20px;">
+        Once submitted, you cannot change your answers.
       </p>
       <button class="btn btn-gold" id="submitBtn" onclick="submitAssessment()">
-        Submit Assessment & Generate Report →
+        Submit Assessment →
       </button>
     </div>
   </div>
@@ -139,24 +184,36 @@
   <div class="scoring-box">
     <div class="spinner"></div>
     <div class="scoring-title">Evaluating Responses</div>
-    <div class="scoring-sub">AI engine is scoring your answers...<br/>Please do not close this tab.</div>
-    <div class="progress-bar-outer" style="max-width:300px; margin: 12px auto;">
-      <div class="progress-bar-inner" id="scoringBar" style="width:0%; background: var(--gold);"></div>
+    <div class="scoring-sub">AI engine is scoring your answers…<br/>Please do not close this tab.</div>
+    <div class="progress-bar-outer" style="max-width:300px; margin:12px auto;">
+      <div class="progress-bar-inner" id="scoringBar" style="width:0%; background:var(--gold);"></div>
     </div>
-    <div class="scoring-progress-text" id="scoringProgressText">Initialising...</div>
+    <div id="scoringProgressText" style="font-size:13px;color:#ccc;margin-top:8px;">Initialising...</div>
+  </div>
+</div>
+
+<!-- Timeout Modal -->
+<div class="timeout-modal" id="timeoutModal">
+  <div class="timeout-box">
+    <div class="timeout-icon">⏰</div>
+    <div class="timeout-title">Time's Up!</div>
+    <div class="timeout-msg" id="timeoutMsg">
+      Your assessment time has expired.<br/>
+      Your answered questions will now be submitted automatically.<br/>
+      Unanswered questions will be scored as zero.
+    </div>
+    <button class="btn btn-primary" onclick="forceSubmit()">Submit Now →</button>
   </div>
 </div>
 
 <script>
-// ─── Init ───────────────────────────────────────────────────────────────────
-const sessionId  = sessionStorage.getItem('rdc_session_id');
-const questions  = JSON.parse(sessionStorage.getItem('rdc_questions') || '[]');
-const candidate  = JSON.parse(sessionStorage.getItem('rdc_candidate') || '{}');
-let   answers    = JSON.parse(sessionStorage.getItem('rdc_answers')   || '{}');
+// ─── Init ────────────────────────────────────────────────────────────────────
+const sessionId = sessionStorage.getItem('rdc_session_id');
+const questions = JSON.parse(sessionStorage.getItem('rdc_questions') || '[]');
+const candidate = JSON.parse(sessionStorage.getItem('rdc_candidate') || '{}');
+let   answers   = JSON.parse(sessionStorage.getItem('rdc_answers')   || '{}');
 
-if (!sessionId || !questions.length) {
-  window.location.href = '/';
-}
+if (!sessionId || !questions.length) { window.location.href = '/'; }
 
 document.getElementById('candidateHeader').textContent =
   `${candidate.candidate_name || ''} | ${candidate.plant_location || ''}`;
@@ -166,77 +223,161 @@ let voiceMode  = false;
 let recognition = null;
 let isRecording = false;
 let voiceTranscriptFull = '';
+let assessmentMinutes = 90; // default, overridden by config
+let timerInterval = null;
+let timerExpired  = false;
 
-// ─── Render Question ────────────────────────────────────────────────────────
+// ─── Load config & start timer ───────────────────────────────────────────────
+(async () => {
+  try {
+    const cfg = await fetch('/api/config').then(r => r.json());
+    assessmentMinutes = cfg.assessment_minutes || 90;
+  } catch {}
+  startTimer(assessmentMinutes * 60);
+  buildPalette();
+  renderQuestion(0);
+})();
+
+// ─── Timer ───────────────────────────────────────────────────────────────────
+function startTimer(totalSeconds) {
+  let remaining = totalSeconds;
+  const el   = document.getElementById('timerText');
+  const wrap = document.getElementById('timerDisplay');
+
+  timerInterval = setInterval(() => {
+    if (remaining <= 0) {
+      clearInterval(timerInterval);
+      timerExpired = true;
+      el.textContent = '00:00';
+      onTimerExpired();
+      return;
+    }
+    remaining--;
+    const h = Math.floor(remaining / 3600);
+    const m = Math.floor((remaining % 3600) / 60);
+    const s = remaining % 60;
+    el.textContent = h > 0
+      ? `${h}:${pad(m)}:${pad(s)}`
+      : `${pad(m)}:${pad(s)}`;
+
+    wrap.classList.remove('warn','crit');
+    if (remaining <= 300) wrap.classList.add('crit');
+    else if (remaining <= 600) wrap.classList.add('warn');
+  }, 1000);
+}
+
+function pad(n) { return String(n).padStart(2,'0'); }
+
+function onTimerExpired() {
+  saveCurrentAnswer();
+  const answered  = questions.filter(q => answers[q.srt_id] && answers[q.srt_id].trim()).length;
+  const unanswered = questions.length - answered;
+  document.getElementById('timeoutMsg').innerHTML =
+    `Your assessment time has expired.<br/>` +
+    `<strong>${answered}</strong> question(s) answered. ` +
+    `<strong>${unanswered}</strong> unanswered question(s) will be scored as zero.`;
+  document.getElementById('timeoutModal').classList.add('show');
+}
+
+function forceSubmit() {
+  document.getElementById('timeoutModal').classList.remove('show');
+  submitAssessment();
+}
+
+// ─── Q-dot Palette ───────────────────────────────────────────────────────────
+function buildPalette() {
+  const pal = document.getElementById('qPalette');
+  pal.innerHTML = '';
+  questions.forEach((q, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'q-dot' + (i === 0 ? ' current' : '');
+    dot.id = `dot-${i}`;
+    dot.textContent = i + 1;
+    dot.title = `Question ${i+1}`;
+    dot.onclick = () => { saveCurrentAnswer(); currentIdx = i; renderQuestion(i); };
+    pal.appendChild(dot);
+  });
+}
+
+function updatePalette() {
+  questions.forEach((q, i) => {
+    const dot = document.getElementById(`dot-${i}`);
+    if (!dot) return;
+    dot.className = 'q-dot';
+    if (answers[q.srt_id] && answers[q.srt_id].trim()) dot.classList.add('answered');
+    if (i === currentIdx) dot.classList.add('current');
+  });
+}
+
+// ─── Render Question ─────────────────────────────────────────────────────────
 function renderQuestion(idx) {
   const q = questions[idx];
   if (!q) return;
 
-  document.getElementById('primaryBadge').textContent    = q.primary_competency;
-  document.getElementById('secondaryBadge').textContent  = `Secondary: ${q.secondary_competency}`;
-  document.getElementById('situationBox').textContent    = q.situation;
-  document.getElementById('qNumDisplay').textContent     = `Q${idx+1} / ${questions.length}`;
-  document.getElementById('progressLabel').textContent   = `Question ${idx+1} of ${questions.length}`;
-  document.getElementById('competencyLabel').textContent = q.primary_competency;
-  document.getElementById('progressBar').style.width    = `${((idx+1)/questions.length)*100}%`;
+  // NOTE: No competency shown to candidate — only situation and Q number
+  document.getElementById('situationBox').textContent   = q.situation;
+  document.getElementById('qNumDisplay').textContent    = `Q${idx+1} / ${questions.length}`;
+  document.getElementById('progressLabel').textContent  = `Question ${idx+1} of ${questions.length}`;
+  document.getElementById('progressBar').style.width   = `${((idx+1)/questions.length)*100}%`;
+
+  // Answered count
+  const nAnswered = questions.filter(q => answers[q.srt_id] && answers[q.srt_id].trim()).length;
+  document.getElementById('answeredCount').textContent = `${nAnswered} answered`;
 
   // Restore saved answer
-  const savedAnswer = answers[q.srt_id] || '';
-  document.getElementById('responseText').value = savedAnswer;
-  document.getElementById('voiceTranscript').textContent = savedAnswer || 'Your spoken response will appear here...';
-  voiceTranscriptFull = savedAnswer;
+  const saved = answers[q.srt_id] || '';
+  document.getElementById('responseText').value = saved;
+  document.getElementById('voiceTranscript').textContent = saved || 'Your spoken response will appear here...';
+  voiceTranscriptFull = saved;
   updateCharCount();
 
-  // Prev / Next buttons
+  // Buttons
   document.getElementById('prevBtn').disabled = (idx === 0);
   const isLast = (idx === questions.length - 1);
   document.getElementById('nextBtn').textContent = isLast ? 'Review & Submit →' : 'Next Question →';
 
-  // Show/hide submit section
-  const allAnswered = questions.every(q => answers[q.srt_id] && answers[q.srt_id].trim().length > 0);
-  document.getElementById('submitSection').style.display = (isLast && allAnswered) ? 'block' : 'none';
+  // Show submit section only on last question
+  if (isLast) {
+    const nAns = questions.filter(q => answers[q.srt_id] && answers[q.srt_id].trim()).length;
+    document.getElementById('answeredFinal').textContent = nAns;
+    document.getElementById('submitSection').style.display = 'block';
+  } else {
+    document.getElementById('submitSection').style.display = 'none';
+  }
 
-  // Reset voice recording if active
   stopVoice();
+  updatePalette();
 }
 
-// ─── Navigation ─────────────────────────────────────────────────────────────
+// ─── Navigation ──────────────────────────────────────────────────────────────
 function navigate(dir) {
   saveCurrentAnswer();
   const next = currentIdx + dir;
   if (next >= 0 && next < questions.length) {
     currentIdx = next;
     renderQuestion(currentIdx);
-  } else if (next >= questions.length) {
-    // Last question, check if all answered
-    const allAnswered = questions.every(q => answers[q.srt_id] && answers[q.srt_id].trim().length > 0);
-    document.getElementById('submitSection').style.display = allAnswered ? 'block' : 'none';
-    if (!allAnswered) {
-      const missing = questions.filter(q => !answers[q.srt_id] || !answers[q.srt_id].trim()).length;
-      alert(`Please answer all questions before submitting. ${missing} question(s) are unanswered.`);
-    }
   }
 }
 
 function saveCurrentAnswer() {
   const q = questions[currentIdx];
-  let text = '';
-  if (voiceMode) {
-    text = voiceTranscriptFull.trim();
-  } else {
-    text = document.getElementById('responseText').value.trim();
-  }
+  const text = voiceMode
+    ? voiceTranscriptFull.trim()
+    : document.getElementById('responseText').value.trim();
   if (text) {
     answers[q.srt_id] = text;
     sessionStorage.setItem('rdc_answers', JSON.stringify(answers));
-    // Show saved indicator
     const ind = document.getElementById('savedIndicator');
     ind.classList.add('show');
     setTimeout(() => ind.classList.remove('show'), 1500);
+    updatePalette();
+    // Update answered count
+    const nAnswered = questions.filter(q => answers[q.srt_id] && answers[q.srt_id].trim()).length;
+    document.getElementById('answeredCount').textContent = `${nAnswered} answered`;
   }
 }
 
-// ─── Input Mode Toggle ───────────────────────────────────────────────────────
+// ─── Input Mode Toggle ────────────────────────────────────────────────────────
 function setMode(mode) {
   saveCurrentAnswer();
   voiceMode = (mode === 'voice');
@@ -247,15 +388,14 @@ function setMode(mode) {
   if (voiceMode) initVoice();
 }
 
-// ─── Auto-save on type ───────────────────────────────────────────────────────
 document.getElementById('responseText').addEventListener('input', () => {
   updateCharCount();
   debounce(() => saveCurrentAnswer(), 800)();
 });
 
 function updateCharCount() {
-  const len = document.getElementById('responseText').value.length;
-  document.getElementById('charCount').textContent = `${len} characters`;
+  document.getElementById('charCount').textContent =
+    document.getElementById('responseText').value.length + ' characters';
 }
 
 let debounceTimer;
@@ -263,67 +403,49 @@ function debounce(fn, delay) {
   return () => { clearTimeout(debounceTimer); debounceTimer = setTimeout(fn, delay); };
 }
 
-// ─── Voice (Web Speech API) ──────────────────────────────────────────────────
+// ─── Voice (Web Speech API) ───────────────────────────────────────────────────
 function initVoice() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
     document.getElementById('voiceWarn').style.display = 'block';
     document.getElementById('micBtn').disabled = true;
     return;
   }
-  recognition = new SpeechRecognition();
+  recognition = new SR();
   recognition.lang = 'en-IN';
   recognition.continuous = true;
   recognition.interimResults = true;
 
   recognition.onresult = (e) => {
-    let interim = '';
-    let final = voiceTranscriptFull;
+    let interim = '', final = voiceTranscriptFull;
     for (let i = e.resultIndex; i < e.results.length; i++) {
-      if (e.results[i].isFinal) {
-        final += e.results[i][0].transcript + ' ';
-      } else {
-        interim += e.results[i][0].transcript;
-      }
+      if (e.results[i].isFinal) final += e.results[i][0].transcript + ' ';
+      else interim += e.results[i][0].transcript;
     }
     voiceTranscriptFull = final;
     document.getElementById('voiceTranscript').textContent = final + interim;
-    // Sync to text area too
     document.getElementById('responseText').value = (final + interim).trim();
     saveCurrentAnswer();
   };
-
   recognition.onerror = (e) => {
     document.getElementById('voiceStatus').textContent = 'Error: ' + e.error + '. Try again.';
     setRecordingState(false);
   };
-
-  recognition.onend = () => {
-    if (isRecording) recognition.start(); // keep recording if still active
-  };
-
+  recognition.onend = () => { if (isRecording) recognition.start(); };
   document.getElementById('micBtn').onclick = toggleVoice;
 }
 
-function toggleVoice() {
-  if (!recognition) return;
-  if (isRecording) {
-    stopVoice();
-  } else {
-    startVoice();
-  }
-}
+function toggleVoice() { isRecording ? stopVoice() : startVoice(); }
 
 function startVoice() {
+  if (!recognition) return;
   recognition.start();
   setRecordingState(true);
-  document.getElementById('voiceStatus').textContent = '🔴 Recording... Click mic to stop';
+  document.getElementById('voiceStatus').textContent = '🔴 Recording… Click mic to stop';
 }
 
 function stopVoice() {
-  if (recognition && isRecording) {
-    recognition.stop();
-  }
+  if (recognition && isRecording) recognition.stop();
   setRecordingState(false);
   document.getElementById('voiceStatus').textContent = 'Click the microphone to start speaking';
 }
@@ -341,10 +463,12 @@ function clearVoice() {
   const q = questions[currentIdx];
   delete answers[q.srt_id];
   sessionStorage.setItem('rdc_answers', JSON.stringify(answers));
+  updatePalette();
 }
 
-// ─── Submit Assessment ───────────────────────────────────────────────────────
+// ─── Submit Assessment ────────────────────────────────────────────────────────
 async function submitAssessment() {
+  if (timerInterval) { clearInterval(timerInterval); }
   saveCurrentAnswer();
 
   const overlay = document.getElementById('scoringOverlay');
@@ -352,56 +476,50 @@ async function submitAssessment() {
 
   const progressText = document.getElementById('scoringProgressText');
   const scoringBar   = document.getElementById('scoringBar');
-
   let scored = 0;
   const total = questions.length;
 
   for (const q of questions) {
     const transcript = answers[q.srt_id] || '';
-    progressText.textContent = `Scoring Q${q.question_number} / ${total}: ${q.primary_competency}`;
-    scoringBar.style.width = `${(scored / total) * 100}%`;
-
+    progressText.textContent = `Scoring Q${q.question_number} / ${total}…`;
+    scoringBar.style.width   = `${(scored / total) * 100}%`;
     try {
       await fetch('/api/score-question', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          session_id: sessionId,
-          srt_id: q.srt_id,
-          situation: q.situation,
-          primary_competency: q.primary_competency,
+          session_id:           sessionId,
+          srt_id:               q.srt_id,
+          situation:            q.situation,
+          primary_competency:   q.primary_competency,
           secondary_competency: q.secondary_competency,
           candidate_transcript: transcript,
         }),
       });
-    } catch (err) {
-      console.warn('Score error for', q.srt_id, err);
-    }
+    } catch (err) { console.warn('Score error for', q.srt_id, err); }
     scored++;
   }
 
   scoringBar.style.width = '95%';
-  progressText.textContent = 'Generating final report...';
+  progressText.textContent = 'Generating final report…';
 
   try {
-    const reportRes = await fetch('/api/final-report', {
+    const res  = await fetch('/api/final-report', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: sessionId }),
     });
-    const reportData = await reportRes.json();
-    sessionStorage.setItem('rdc_report', JSON.stringify(reportData));
+    const data = await res.json();
+    sessionStorage.setItem('rdc_report', JSON.stringify(data));
     scoringBar.style.width = '100%';
-    progressText.textContent = 'Complete! Redirecting...';
-    setTimeout(() => { window.location.href = '/report'; }, 800);
+    progressText.textContent = 'Complete! Redirecting…';
+    // ── Candidate goes to THANK-YOU page, NOT the report ──
+    setTimeout(() => { window.location.href = '/thank-you'; }, 800);
   } catch (err) {
     overlay.classList.remove('show');
     alert('Error generating report: ' + err.message);
   }
 }
-
-// ─── Init ────────────────────────────────────────────────────────────────────
-renderQuestion(0);
 </script>
 
 </body>
