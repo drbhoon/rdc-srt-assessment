@@ -74,15 +74,25 @@ def score_question(
             model="claude-3-haiku-20240307",
             max_tokens=1024,
             system=system_prompt,
-            messages=[{
-                "role": "user",
-                "content": (
-                    "Score this SRT response. Return ONLY valid JSON, no extra text.\n\n"
-                    + json.dumps(input_data, indent=2, ensure_ascii=False)
-                ),
-            }],
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        "Score this SRT response. "
+                        "Respond with ONLY a valid JSON object — no prose, no markdown fences. "
+                        "Start with '{' and end with '}'.\n\n"
+                        + json.dumps(input_data, indent=2, ensure_ascii=False)
+                    ),
+                },
+                {
+                    # Assistant prefill — guarantees response begins with '{'
+                    "role": "assistant",
+                    "content": "{",
+                },
+            ],
         )
-        response_text = message.content[0].text.strip()
+        # Prepend the prefilled '{' back before parsing
+        response_text = "{" + message.content[0].text.strip()
         logger.info("Scorer raw response for %s: %s", srt_id, response_text[:200])
         json_str = _extract_json(response_text)
         result = json.loads(json_str)

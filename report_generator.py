@@ -35,27 +35,37 @@ def generate_final_report(
             {
                 "role": "user",
                 "content": (
-                    f"Generate the final assessment report:\n\n"
+                    "Generate the final assessment report. "
+                    "You MUST respond with ONLY a valid JSON object — no prose, no markdown, "
+                    "no explanation before or after. Start your response with '{' and end with '}'.\n\n"
                     f"{json.dumps(input_data, indent=2, ensure_ascii=False)}"
                 ),
-            }
+            },
+            {
+                # Assistant prefill — forces the model to continue from '{' → pure JSON
+                "role": "assistant",
+                "content": "{",
+            },
         ],
     )
 
-    response_text = message.content[0].text.strip()
+    # Model continues after our prefilled '{', so prepend it back
+    response_text = "{" + message.content[0].text.strip()
 
-    # Extract JSON block if wrapped in markdown
-    json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", response_text, re.DOTALL)
-    if json_match:
-        response_text = json_match.group(1)
-    else:
-        obj_match = re.search(r"\{.*\}", response_text, re.DOTALL)
-        if obj_match:
-            response_text = obj_match.group()
+    # Strip any trailing markdown fence if model added one
+    response_text = re.sub(r"```.*$", "", response_text, flags=re.DOTALL).strip()
 
     try:
         result = json.loads(response_text)
     except json.JSONDecodeError:
-        result = {"raw_response": response_text, "error": "JSON parse failed"}
+        # Fallback: try to extract the outermost JSON object
+        obj_match = re.search(r"\{.*\}", response_text, re.DOTALL)
+        if obj_match:
+            try:
+                result = json.loads(obj_match.group())
+            except json.JSONDecodeError:
+                result = {"raw_response": response_text, "error": "JSON parse failed"}
+        else:
+            result = {"raw_response": response_text, "error": "JSON parse failed"}
 
     return result
