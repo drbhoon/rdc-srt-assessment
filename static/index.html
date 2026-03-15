@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RDC Plant Incharge – SRT Assessment</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    .hero {
+      background: linear-gradient(135deg, #003366 0%, #004e99 100%);
+      padding: 48px 24px;
+      text-align: center;
+      color: #fff;
+    }
+    .hero h1 { font-size: 26px; font-weight: 800; margin-bottom: 10px; }
+    .hero p  { font-size: 15px; color: #aac8e8; max-width: 520px; margin: 0 auto 8px; }
+    .hero-badge {
+      display: inline-block;
+      background: rgba(200,150,12,0.2);
+      border: 1px solid var(--gold);
+      color: var(--gold);
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      margin-bottom: 16px;
+    }
+    .stats-row {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      margin: 28px 0;
+    }
+    .stat-item { text-align: center; color: #fff; }
+    .stat-num  { font-size: 30px; font-weight: 800; color: var(--gold); }
+    .stat-lbl  { font-size: 12px; color: #aac8e8; margin-top: 2px; }
+    .form-note { font-size: 12px; color: var(--grey-mid); margin-top: 6px; }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-inner">
+    <div class="header-logo">RDC</div>
+    <div>
+      <div class="header-title">Plant Incharge – SRT Assessment Engine</div>
+      <div class="header-sub">Ready-Mix Concrete Operations | Confidential – Head Office Use Only</div>
+    </div>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="hero-badge">CONFIDENTIAL ASSESSMENT TOOL</div>
+  <h1>Situation Reaction Test</h1>
+  <p>AI-powered leadership competency assessment for RMC Plant Incharge candidates.</p>
+  <div class="stats-row">
+    <div class="stat-item">
+      <div class="stat-num">30</div>
+      <div class="stat-lbl">Questions</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">10</div>
+      <div class="stat-lbl">Competencies</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">300</div>
+      <div class="stat-lbl">Max Score</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">~45</div>
+      <div class="stat-lbl">Minutes</div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="card">
+    <div class="card-title">📋 Candidate Registration</div>
+    <div class="alert alert-info">
+      Please fill in accurate details. These will appear on the final assessment report.
+    </div>
+    <form id="regForm">
+      <div class="form-group">
+        <label>Candidate Full Name *</label>
+        <input type="text" id="candidateName" placeholder="e.g., Rajesh Kumar Sharma" required />
+      </div>
+      <div class="form-group">
+        <label>Plant Location *</label>
+        <input type="text" id="plantLocation" placeholder="e.g., Bangalore – Whitefield Plant" required />
+      </div>
+      <div class="form-group">
+        <label>Assessment Date *</label>
+        <input type="date" id="assessmentDate" required />
+      </div>
+      <div style="margin-top:8px;">
+        <button type="submit" class="btn btn-primary" id="startBtn">
+          <span>Begin Assessment →</span>
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="card-title">ℹ️ Assessment Instructions</div>
+    <ul style="list-style:disc; padding-left:20px; font-size:14px; line-height:2;">
+      <li>You will be presented with <strong>30 real-world plant situations</strong> one at a time.</li>
+      <li>Read each situation carefully and respond as you would in the actual role.</li>
+      <li>You may <strong>type your response</strong> or use the <strong>voice dictation</strong> feature.</li>
+      <li>Be specific — mention data, systems, team actions, root causes where relevant.</li>
+      <li>Do not skip questions. All 30 must be answered for a complete report.</li>
+      <li>Your responses are evaluated on: Problem Understanding, Depth, Secondary Awareness, and Structure.</li>
+      <li>The final report will be available for download as a <strong>PDF</strong> after all questions.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  // Set today's date as default
+  document.getElementById('assessmentDate').value = new Date().toISOString().split('T')[0];
+
+  document.getElementById('regForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('startBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span>Starting...</span>';
+
+    const payload = {
+      candidate_name: document.getElementById('candidateName').value.trim(),
+      plant_location: document.getElementById('plantLocation').value.trim(),
+      assessment_date: document.getElementById('assessmentDate').value,
+    };
+
+    try {
+      const res = await fetch('/api/start-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+
+      // Store session data
+      sessionStorage.setItem('rdc_session_id', data.session_id);
+      sessionStorage.setItem('rdc_questions', JSON.stringify(data.questions));
+      sessionStorage.setItem('rdc_candidate', JSON.stringify(payload));
+      sessionStorage.setItem('rdc_answers', JSON.stringify({}));
+
+      window.location.href = '/assessment';
+    } catch (err) {
+      alert('Error starting session: ' + err.message);
+      btn.disabled = false;
+      btn.innerHTML = '<span>Begin Assessment →</span>';
+    }
+  });
+</script>
+
+</body>
+</html>

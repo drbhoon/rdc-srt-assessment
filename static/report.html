@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Assessment Report – RDC</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    .section-divider {
+      height: 3px;
+      background: linear-gradient(to right, var(--blue), var(--gold));
+      border-radius: 2px;
+      margin: 6px 0 20px;
+    }
+    .cand-info-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .cand-info-item {
+      background: var(--blue-light);
+      border-radius: 6px;
+      padding: 8px 14px;
+      font-size: 13px;
+    }
+    .cand-info-item strong { color: var(--blue); }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-inner">
+    <div class="header-logo">RDC</div>
+    <div>
+      <div class="header-title">Competency Assessment Report</div>
+      <div class="header-sub">RDC Plant Incharge – SRT Evaluation | Confidential</div>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Loading State -->
+  <div id="loadingCard" class="card" style="text-align:center; padding:48px;">
+    <div class="spinner"></div>
+    <div style="margin-top:16px; font-size:15px; color:var(--grey-mid);">Loading report...</div>
+  </div>
+
+  <!-- Report Content (hidden until loaded) -->
+  <div id="reportContent" style="display:none;">
+
+    <!-- Candidate Info -->
+    <div class="card">
+      <div class="card-title">📋 Candidate Information</div>
+      <div class="section-divider"></div>
+      <div class="cand-info-row">
+        <div class="cand-info-item"><strong>Name:</strong> <span id="r-name"></span></div>
+        <div class="cand-info-item"><strong>Plant:</strong> <span id="r-plant"></span></div>
+        <div class="cand-info-item"><strong>Date:</strong> <span id="r-date"></span></div>
+        <div class="cand-info-item"><strong>Questions:</strong> 30 SRTs</div>
+      </div>
+    </div>
+
+    <!-- Overall Performance -->
+    <div class="card">
+      <div class="card-title">📊 Overall Performance Summary</div>
+      <div class="section-divider"></div>
+      <div class="score-hero">
+        <div class="score-box">
+          <div class="score-num" id="r-total">—</div>
+          <div class="score-label">Total Score (out of 300)</div>
+        </div>
+        <div class="score-box">
+          <div class="score-num" id="r-normalized">—</div>
+          <div class="score-label">Normalized Score (%)</div>
+        </div>
+        <div class="readiness-box" id="r-readiness-box">
+          <div class="score-label" style="margin-bottom:8px;">Overall Readiness</div>
+          <div class="readiness-text" id="r-readiness">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Competency Breakdown -->
+    <div class="card">
+      <div class="card-title">🎯 Competency Performance Highlights</div>
+      <div class="section-divider"></div>
+      <div id="r-competencies"></div>
+    </div>
+
+    <!-- Strengths & Development in 2-col -->
+    <div style="display:flex; gap:16px;">
+      <div class="card" style="flex:1;">
+        <div class="card-title">✅ Key Strengths</div>
+        <div class="section-divider"></div>
+        <ul class="strength-list" id="r-strengths"></ul>
+      </div>
+      <div class="card" style="flex:1;">
+        <div class="card-title">📈 Development Areas</div>
+        <div class="section-divider"></div>
+        <ul class="dev-list" id="r-dev-areas"></ul>
+      </div>
+    </div>
+
+    <!-- Development Actions -->
+    <div class="card">
+      <div class="card-title">🔧 Recommended Development Actions</div>
+      <div class="section-divider"></div>
+      <div id="r-actions"></div>
+    </div>
+
+    <!-- Coaching Plan -->
+    <div class="card">
+      <div class="card-title">📅 30 – 60 – 90 Day Coaching Plan</div>
+      <div class="section-divider"></div>
+      <div id="r-coaching"></div>
+    </div>
+
+    <!-- Download -->
+    <div class="card" style="text-align:center; background: var(--blue-light);">
+      <div class="card-title" style="color:var(--blue); text-align:center;">📥 Download Full Report</div>
+      <p style="font-size:14px; color:var(--grey-mid); margin-bottom:20px;">
+        Download the complete assessment report as a professionally formatted PDF.
+      </p>
+      <a id="pdfDownloadBtn" href="#" class="btn btn-primary" target="_blank">
+        ⬇️ Download PDF Report
+      </a>
+      &nbsp;
+      <a href="/" class="btn btn-outline">Start New Assessment</a>
+    </div>
+
+  </div><!-- end reportContent -->
+</div>
+
+<script>
+const sessionId = sessionStorage.getItem('rdc_session_id');
+const candidate = JSON.parse(sessionStorage.getItem('rdc_candidate') || '{}');
+const report    = JSON.parse(sessionStorage.getItem('rdc_report')    || 'null');
+
+if (!report) {
+  window.location.href = '/';
+}
+
+function readinessClass(text) {
+  const t = (text || '').toLowerCase();
+  if (t.includes('higher responsibility')) return 'ready-high';
+  if (t.includes('structured support'))   return 'ready-mid';
+  return 'ready-low';
+}
+
+function getRating(score) {
+  if (score >= 8)  return { label: 'Excellent',        cls: 'tag-excellent' };
+  if (score >= 6)  return { label: 'Good',             cls: 'tag-good'      };
+  if (score >= 4)  return { label: 'Developing',       cls: 'tag-developing'};
+  return               { label: 'Needs Improvement', cls: 'tag-needs'    };
+}
+
+function barColor(score) {
+  if (score >= 8)  return 'var(--green)';
+  if (score >= 6)  return 'var(--blue-mid)';
+  if (score >= 4)  return 'var(--orange)';
+  return 'var(--red)';
+}
+
+function renderReport() {
+  document.getElementById('loadingCard').style.display   = 'none';
+  document.getElementById('reportContent').style.display = 'block';
+
+  // Candidate
+  document.getElementById('r-name').textContent  = candidate.candidate_name  || '';
+  document.getElementById('r-plant').textContent = candidate.plant_location  || '';
+  document.getElementById('r-date').textContent  = candidate.assessment_date || '';
+
+  // Scores
+  document.getElementById('r-total').textContent      = report.overall_score_out_of_300 ?? '—';
+  document.getElementById('r-normalized').textContent = (report.normalized_score_out_of_100 ?? 0).toFixed(1) + '%';
+
+  // Readiness
+  const readiness = report.overall_readiness || '—';
+  const readinessEl = document.getElementById('r-readiness');
+  readinessEl.textContent = readiness;
+  document.getElementById('r-readiness-box').classList.add(readinessClass(readiness));
+
+  // Competencies
+  const compEl = document.getElementById('r-competencies');
+  const compSummary = report.competency_summary || {};
+  compEl.innerHTML = '';
+  for (const [name, score] of Object.entries(compSummary)) {
+    const { label, cls } = getRating(score);
+    const pct = (score / 10) * 100;
+    compEl.innerHTML += `
+      <div class="comp-row">
+        <div class="comp-name">${name}</div>
+        <div class="comp-bar-wrap">
+          <div class="comp-bar" style="width:${pct}%; background:${barColor(score)};"></div>
+        </div>
+        <div class="comp-score">${Number(score).toFixed(1)}</div>
+        <div class="rating-tag ${cls}">${label}</div>
+      </div>`;
+  }
+
+  // Strengths
+  const strEl = document.getElementById('r-strengths');
+  (report.top_strengths || []).forEach(s => {
+    strEl.innerHTML += `<li>${s}</li>`;
+  });
+
+  // Dev areas
+  const devEl = document.getElementById('r-dev-areas');
+  (report.development_areas || []).forEach(d => {
+    devEl.innerHTML += `<li>${d}</li>`;
+  });
+
+  // Actions
+  const actEl = document.getElementById('r-actions');
+  (report.development_actions || []).forEach((a, i) => {
+    actEl.innerHTML += `
+      <div class="action-item">
+        <div class="action-num">${i+1}</div>
+        <div class="action-text">${a}</div>
+      </div>`;
+  });
+
+  // Coaching plan
+  const coachEl = document.getElementById('r-coaching');
+  const coaching = report.coaching_plan_30_60_90 || {};
+  const phases = [
+    { key: '30_days', label: 'First 30 Days', color: 'var(--blue)' },
+    { key: '60_days', label: '31 – 60 Days',  color: 'var(--gold)' },
+    { key: '90_days', label: '61 – 90 Days',  color: 'var(--green)' },
+  ];
+  phases.forEach(p => {
+    const items = (coaching[p.key] || []).map(i => `<li>${i}</li>`).join('');
+    coachEl.innerHTML += `
+      <div class="coaching-phase" style="border-color:${p.color};">
+        <div class="phase-label" style="color:${p.color};">${p.label}</div>
+        <ul>${items}</ul>
+      </div>`;
+  });
+
+  // PDF Download link
+  document.getElementById('pdfDownloadBtn').href = `/api/download-pdf/${sessionId}`;
+}
+
+renderReport();
+</script>
+
+</body>
+</html>
