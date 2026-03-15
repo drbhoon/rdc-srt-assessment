@@ -95,6 +95,29 @@
     .btn-del  { background: #dc3545; color: #fff; border: none; padding: 5px 12px;
       border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; margin-left: 6px; }
     .btn-del:hover { background: #a71d2a; }
+    .btn-reset { background: #6c757d; color: #fff; border: none; padding: 5px 12px;
+      border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; margin-left: 6px; }
+    .btn-reset:hover { background: #545b62; }
+
+    /* Quick Test modal */
+    .qt-modal-bg {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55);
+      z-index: 2000; justify-content: center; align-items: center;
+    }
+    .qt-modal-bg.show { display: flex; }
+    .qt-modal-box {
+      background: #fff; border-radius: 14px; width: 100%; max-width: 480px;
+      padding: 32px; position: relative; box-shadow: 0 8px 40px rgba(0,51,102,.18);
+    }
+    .qt-status {
+      margin-top: 14px; font-size: 13px; padding: 10px 14px;
+      border-radius: 7px; display: none;
+    }
+    .qt-status.info { background: #e8f0f7; color: var(--blue); display: block; }
+    .qt-status.ok   { background: #d4edda; color: #155724;     display: block; }
+    .qt-status.err  { background: #f8d7da; color: #721c24;     display: block; }
+    .qt-bar-outer { background: #eef1f6; border-radius: 6px; height: 10px; margin-top: 10px; overflow: hidden; }
+    .qt-bar-inner { height: 100%; border-radius: 6px; background: var(--gold); width: 0%; transition: width .4s; }
 
     /* Empty state */
     .empty-state { text-align: center; padding: 48px 24px; color: var(--grey-mid); }
@@ -181,6 +204,7 @@
     <input type="text" id="searchInput" placeholder="🔍 Search by name or plant…" oninput="renderTable()"/>
     <button class="btn-refresh" onclick="loadSessions()">↻ Refresh</button>
     <button class="btn btn-outline btn-sm" onclick="window.location.href='/'">+ New Assessment</button>
+    <button class="btn btn-primary btn-sm" onclick="openQuickTest()" title="Run a full pipeline test without answering 30 questions">🧪 Quick Test</button>
   </div>
 
   <div class="table-wrap">
@@ -206,6 +230,35 @@
       <div class="empty-icon">📋</div>
       <div>No assessments found.</div>
     </div>
+  </div>
+</div>
+
+<!-- ── QUICK TEST MODAL ──────────────────────────────────────────────────────── -->
+<div class="qt-modal-bg" id="qtModal">
+  <div class="qt-modal-box">
+    <button class="modal-close" onclick="closeQuickTest()">✕</button>
+    <div class="modal-title">🧪 Quick Test — Pipeline Check</div>
+    <div class="modal-sub" style="margin-bottom:20px;">
+      Creates a dummy assessment session with auto-generated answers and runs the full
+      scoring + report + PDF pipeline. No need to answer 30 questions.
+    </div>
+    <div class="form-group">
+      <label>Test Candidate Name</label>
+      <input type="text" id="qt-name" value="Admin Test Run" style="width:100%;padding:8px 12px;border:1px solid #d0d9e6;border-radius:7px;font-size:13px;"/>
+    </div>
+    <div class="form-group" style="margin-top:12px;">
+      <label>Plant Location</label>
+      <input type="text" id="qt-plant" value="Test Plant – QA" style="width:100%;padding:8px 12px;border:1px solid #d0d9e6;border-radius:7px;font-size:13px;"/>
+    </div>
+    <div style="margin-top:20px; display:flex; gap:10px;">
+      <button class="btn btn-primary" id="qt-start-btn" onclick="startQuickTest()" style="flex:1;">▶ Start Test</button>
+      <button class="btn btn-outline" onclick="closeQuickTest()">Cancel</button>
+    </div>
+    <div class="qt-status" id="qt-status"></div>
+    <div class="qt-bar-outer" id="qt-bar-outer" style="display:none;">
+      <div class="qt-bar-inner" id="qt-bar"></div>
+    </div>
+    <div id="qt-sid" style="margin-top:10px;font-size:11px;color:#888;word-break:break-all;"></div>
   </div>
 </div>
 
@@ -362,6 +415,7 @@ function renderTable() {
           <button class="btn-pdf ${s.has_pdf ? '' : 'disabled'}"
             onclick="${s.has_pdf ? `downloadPdfFor('${s.session_id}')` : ''}"
             title="${s.has_pdf ? 'Download PDF' : 'PDF not available'}">⬇️ PDF</button>
+          ${!isDone ? `<button class="btn-reset" onclick="resetSession('${s.session_id}','${escHtml(s.candidate_name)}')" title="Reset stuck session so candidate can resubmit">↺ Reset</button>` : ''}
         </td>
         <td>
           <button class="btn-del" onclick="deleteSession('${s.session_id}','${escHtml(s.candidate_name)}')"
@@ -494,6 +548,115 @@ async function deleteSession(sid, name) {
 document.getElementById('reportModal').addEventListener('click', function(e) {
   if (e.target === this) closeModal();
 });
+document.getElementById('qtModal').addEventListener('click', function(e) {
+  if (e.target === this) closeQuickTest();
+});
+
+// ─── Force-Reset stuck session ────────────────────────────────────────────────
+async function resetSession(sid, name) {
+  if (!confirm(`Reset stuck session for "${name}"?\n\nThis will clear any partial scoring so the candidate can resubmit their answers from the assessment page.`)) return;
+  try {
+    const res = await fetch(`/api/admin/force-reset/${sid}`, {
+      method:  'POST',
+      headers: { 'X-Admin-Token': adminToken },
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
+    alert(`✅ Session reset successfully.\nThe candidate can now resubmit on the assessment page.`);
+    await loadSessions();
+  } catch (e) { alert('Reset failed: ' + e.message); }
+}
+
+// ─── Quick Test ───────────────────────────────────────────────────────────────
+let qtSessionId   = null;
+let qtPollTimer   = null;
+
+function openQuickTest() {
+  document.getElementById('qt-status').className  = 'qt-status';
+  document.getElementById('qt-status').textContent = '';
+  document.getElementById('qt-bar-outer').style.display = 'none';
+  document.getElementById('qt-bar').style.width   = '0%';
+  document.getElementById('qt-sid').textContent   = '';
+  document.getElementById('qt-start-btn').disabled = false;
+  qtSessionId = null;
+  document.getElementById('qtModal').classList.add('show');
+}
+
+function closeQuickTest() {
+  if (qtPollTimer) { clearInterval(qtPollTimer); qtPollTimer = null; }
+  document.getElementById('qtModal').classList.remove('show');
+  loadSessions();   // refresh table in case test completed
+}
+
+async function startQuickTest() {
+  const name  = document.getElementById('qt-name').value.trim()  || 'Admin Test Run';
+  const plant = document.getElementById('qt-plant').value.trim() || 'Test Plant – QA';
+
+  const statusEl = document.getElementById('qt-status');
+  const barEl    = document.getElementById('qt-bar');
+  const barWrap  = document.getElementById('qt-bar-outer');
+  const startBtn = document.getElementById('qt-start-btn');
+
+  startBtn.disabled = true;
+  statusEl.className = 'qt-status info';
+  statusEl.textContent = '⏳ Starting test session…';
+  barWrap.style.display = 'block';
+  barEl.style.width = '5%';
+
+  try {
+    const res = await fetch('/api/admin/quick-test', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken },
+      body:    JSON.stringify({ candidate_name: name, plant_location: plant }),
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
+    const d = await res.json();
+    qtSessionId = d.session_id;
+    document.getElementById('qt-sid').textContent = 'Session ID: ' + qtSessionId;
+    statusEl.textContent = `✅ Session created. Scoring ${d.total} questions with AI…`;
+    pollQuickTest(d.total, statusEl, barEl);
+  } catch (e) {
+    statusEl.className   = 'qt-status err';
+    statusEl.textContent = '❌ Error: ' + e.message;
+    startBtn.disabled    = false;
+  }
+}
+
+function pollQuickTest(total, statusEl, barEl) {
+  let attempts = 0;
+  const MAX    = 140;   // 140 × 3s ≈ 7 minutes
+  qtPollTimer  = setInterval(async () => {
+    attempts++;
+    if (attempts > MAX) {
+      clearInterval(qtPollTimer);
+      statusEl.className   = 'qt-status err';
+      statusEl.textContent = '❌ Timed out after 7 minutes. Check Railway logs.';
+      return;
+    }
+    try {
+      const d = await fetch(`/api/submission-status/${qtSessionId}`).then(r => r.json());
+      const pct = d.status === 'completed' ? 100
+        : Math.min(95, 5 + ((d.progress / (total || 30)) * 85));
+      barEl.style.width = pct + '%';
+
+      if (d.status === 'completed') {
+        clearInterval(qtPollTimer);
+        statusEl.className   = 'qt-status ok';
+        statusEl.textContent = `🎉 Pipeline test PASSED! Scored ${d.total} questions. Report & PDF generated. Check the session in the table.`;
+        loadSessions();
+      } else if (d.status === 'failed') {
+        clearInterval(qtPollTimer);
+        statusEl.className   = 'qt-status err';
+        statusEl.textContent = `❌ Pipeline FAILED: ${d.error || 'Unknown error'}`;
+        document.getElementById('qt-start-btn').disabled = false;
+        loadSessions();
+      } else {
+        statusEl.textContent = d.progress < total
+          ? `⏳ Scoring response ${d.progress} of ${total || 30}…`
+          : '⏳ Generating final report…';
+      }
+    } catch (_) { /* network hiccup — keep polling */ }
+  }, 3000);
+}
 </script>
 </body>
 </html>

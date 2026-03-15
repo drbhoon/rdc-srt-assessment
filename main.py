@@ -119,6 +119,76 @@ async def delete_session(session_id: str, x_admin_token: str = Header(None)):
     del sessions[session_id]
     return {"deleted": True}
 
+# ─── API: Admin — Quick Test (creates dummy session without answering questions)
+@app.post("/api/admin/quick-test")
+async def admin_quick_test(
+    payload: dict,
+    background_tasks: BackgroundTasks,
+    x_admin_token: str = Header(None),
+):
+    """Admin-only: spin up a test session with auto-generated dummy answers.
+    Use this to verify the scoring + report pipeline without sitting an assessment.
+    """
+    if x_admin_token != ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    import datetime
+    session_id = str(uuid.uuid4())
+    candidate  = {
+        "candidate_name":  payload.get("candidate_name",  "Test Candidate"),
+        "plant_location":  payload.get("plant_location",  "Test Plant – Admin"),
+        "assessment_date": payload.get("assessment_date",
+                                       datetime.date.today().isoformat()),
+    }
+    questions = get_session_questions(questions_db, per_competency=3)
+
+    # Generic answer that will produce non-zero scores from Claude
+    dummy_answer = (
+        "I would first assess the situation carefully by reviewing all available data "
+        "and consulting with my team and relevant stakeholders. I would identify the "
+        "root cause using a structured approach, implement preventive and corrective "
+        "actions following RDC protocols, document everything, and ensure follow-up "
+        "to prevent recurrence. Safety and operational discipline are my top priorities "
+        "throughout this process."
+    )
+    dummy_answers = {q["srt_id"]: dummy_answer for q in questions}
+
+    sessions[session_id] = {
+        "candidate":          candidate,
+        "questions":          questions,
+        "scores":             {},
+        "status":             "processing",
+        "progress":           0,
+        "collected_answers":  dummy_answers,
+    }
+
+    background_tasks.add_task(process_assessment_async, session_id)
+    logger.info("Admin quick-test session %s started (%d questions)", session_id, len(questions))
+    return {"session_id": session_id, "status": "processing", "total": len(questions)}
+
+
+# ─── API: Admin — Force Reset stuck session ───────────────────────────────────
+@app.post("/api/admin/force-reset/{session_id}")
+async def force_reset_session(session_id: str, x_admin_token: str = Header(None)):
+    """Reset a stuck / failed session back to in_progress so the candidate can resubmit."""
+    if x_admin_token != ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    session["status"]   = "in_progress"
+    session["progress"] = 0
+    session.pop("error",             None)
+    session.pop("report",            None)
+    session.pop("pdf_bytes",         None)
+    session.pop("pdf_error",         None)
+    session.pop("collected_answers", None)
+    session["scores"] = {}
+    logger.info("Admin force-reset session %s", session_id)
+    return {"reset": True, "session_id": session_id}
+
+
 # ─── API: Start Session ───────────────────────────────────────────────────────
 @app.post("/api/start-session")
 async def start_session(candidate: CandidateInfo):
@@ -147,101 +217,108 @@ async def start_session(candidate: CandidateInfo):
 async def process_assessment_async(session_id: str) -> None:
     """Score all questions + generate report in a background thread pool.
     Uses asyncio.to_thread so the synchronous Anthropic SDK never blocks the event loop.
+    A master try/except guarantees session["status"] is always updated — no silent hangs.
     """
     session = sessions.get(session_id)
     if not session:
         return
 
-    questions        = session["questions"]
-    collected_answers = session.get("collected_answers", {})
-    total            = len(questions)
+    try:  # ← MASTER GUARD: ensures status is always set even on unexpected crash
+        questions         = session["questions"]
+        collected_answers = session.get("collected_answers", {})
+        total             = len(questions)
 
-    logger.info("Starting background processing for session %s (%d questions)", session_id, total)
+        logger.info("Starting background processing for session %s (%d questions)", session_id, total)
 
-    # ── Step 1: Score every question ─────────────────────────────────────────
-    for i, q in enumerate(questions):
-        srt_id     = q["srt_id"]
-        transcript = collected_answers.get(srt_id, "").strip()
+        # ── Step 1: Score every question ──────────────────────────────────────
+        for i, q in enumerate(questions):
+            srt_id     = q["srt_id"]
+            transcript = collected_answers.get(srt_id, "").strip()
 
-        try:
-            result = await asyncio.to_thread(
-                score_question,
-                client=client,
-                srt_id=srt_id,
-                situation=q["situation"],
-                primary_competency=q["primary_competency"],
-                secondary_competency=q["secondary_competency"],
-                candidate_transcript=transcript,
-            )
-        except Exception as exc:
-            logger.error("Scoring failed for %s: %s", srt_id, exc)
-            result = {
-                "srt_id": srt_id,
-                "total": 0,
-                "strengths": [],
-                "improvements": [f"Scoring error: {str(exc)[:80]}"],
-            }
+            try:
+                result = await asyncio.to_thread(
+                    score_question,
+                    client=client,
+                    srt_id=srt_id,
+                    situation=q["situation"],
+                    primary_competency=q["primary_competency"],
+                    secondary_competency=q["secondary_competency"],
+                    candidate_transcript=transcript,
+                )
+            except Exception as exc:
+                logger.error("Scoring failed for %s: %s", srt_id, exc, exc_info=True)
+                result = {
+                    "srt_id": srt_id,
+                    "total": 0,
+                    "strengths": [],
+                    "improvements": [f"Scoring error: {str(exc)[:80]}"],
+                }
 
-        session["scores"][srt_id] = {
-            "competency":   q["primary_competency"],
-            "score":        int(result.get("total", 0)),
-            "strengths":    result.get("strengths", []),
-            "improvements": result.get("improvements", []),
-            "details":      result,
-        }
-        session["progress"] = i + 1
-        logger.info("Scored %d/%d for session %s", i + 1, total, session_id)
-
-    # ── Step 2: Build results array (unanswered = 0) ─────────────────────────
-    results = []
-    for q in questions:
-        srt_id = q["srt_id"]
-        if srt_id in session["scores"]:
-            sc = session["scores"][srt_id]
-            results.append({
-                "competency":   sc["competency"],
-                "score":        sc["score"],
-                "strengths":    sc["strengths"],
-                "improvements": sc["improvements"],
-            })
-        else:
-            results.append({
+            session["scores"][srt_id] = {
                 "competency":   q["primary_competency"],
-                "score":        0,
-                "strengths":    [],
-                "improvements": ["Not answered — counted as zero."],
-            })
+                "score":        int(result.get("total", 0)),
+                "strengths":    result.get("strengths", []),
+                "improvements": result.get("improvements", []),
+                "details":      result,
+            }
+            session["progress"] = i + 1
+            logger.info("Scored %d/%d for session %s", i + 1, total, session_id)
 
-    # ── Step 3: Generate final report ────────────────────────────────────────
-    candidate = session["candidate"]
-    try:
-        report_data = await asyncio.to_thread(
-            generate_final_report,
-            client=client,
-            candidate_name=candidate["candidate_name"],
-            plant_location=candidate["plant_location"],
-            assessment_date=candidate["assessment_date"],
-            results=results,
-        )
-        session["report"] = report_data
-        logger.info("Report generated for session %s", session_id)
-    except Exception as exc:
-        logger.error("Report generation failed for %s: %s", session_id, exc)
+        # ── Step 2: Build results array (unanswered = 0) ──────────────────────
+        results = []
+        for q in questions:
+            srt_id = q["srt_id"]
+            if srt_id in session["scores"]:
+                sc = session["scores"][srt_id]
+                results.append({
+                    "competency":   sc["competency"],
+                    "score":        sc["score"],
+                    "strengths":    sc["strengths"],
+                    "improvements": sc["improvements"],
+                })
+            else:
+                results.append({
+                    "competency":   q["primary_competency"],
+                    "score":        0,
+                    "strengths":    [],
+                    "improvements": ["Not answered — counted as zero."],
+                })
+
+        # ── Step 3: Generate final report ─────────────────────────────────────
+        candidate = session["candidate"]
+        try:
+            report_data = await asyncio.to_thread(
+                generate_final_report,
+                client=client,
+                candidate_name=candidate["candidate_name"],
+                plant_location=candidate["plant_location"],
+                assessment_date=candidate["assessment_date"],
+                results=results,
+            )
+            session["report"] = report_data
+            logger.info("Report generated for session %s", session_id)
+        except Exception as exc:
+            logger.error("Report generation failed for %s: %s", session_id, exc, exc_info=True)
+            session["status"] = "failed"
+            session["error"]  = str(exc)
+            return
+
+        # ── Step 4: Generate PDF ───────────────────────────────────────────────
+        try:
+            pdf_bytes = await asyncio.to_thread(generate_pdf, report_data=report_data, candidate=candidate)
+            session["pdf_bytes"] = pdf_bytes
+            logger.info("PDF generated (%d bytes) for session %s", len(pdf_bytes), session_id)
+        except Exception as exc:
+            logger.error("PDF failed for %s: %s", session_id, exc, exc_info=True)
+            session["pdf_error"] = str(exc)
+
+        session["status"] = "completed"
+        logger.info("Session %s fully completed", session_id)
+
+    except Exception as exc:  # ← catches anything the inner handlers missed
+        logger.error("FATAL background task error for session %s: %s", session_id, exc, exc_info=True)
         session["status"] = "failed"
-        session["error"]  = str(exc)
-        return
-
-    # ── Step 4: Generate PDF ─────────────────────────────────────────────────
-    try:
-        pdf_bytes = await asyncio.to_thread(generate_pdf, report_data=report_data, candidate=candidate)
-        session["pdf_bytes"] = pdf_bytes
-        logger.info("PDF generated (%d bytes) for session %s", len(pdf_bytes), session_id)
-    except Exception as exc:
-        logger.error("PDF failed for %s: %s", session_id, exc)
-        session["pdf_error"] = str(exc)
-
-    session["status"] = "completed"
-    logger.info("Session %s fully completed", session_id)
+        session["error"]  = f"Unexpected error: {str(exc)}"
 
 
 # ─── API: Submit All Answers (new primary submit endpoint) ────────────────────
