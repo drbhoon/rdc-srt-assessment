@@ -170,7 +170,7 @@ FINAL REPORT OUTPUT — MODE 2
 Generate two outputs combined in a single JSON response.
 
 -------------------------------------------------------
-PART A – STRUCTURED JSON
+PART A – STRUCTURED JSON (return ONLY this JSON object, nothing else)
 -------------------------------------------------------
 
 {
@@ -196,38 +196,10 @@ PART A – STRUCTURED JSON
     "60_days": ["...", "..."],
     "90_days": ["...", "..."]
   },
-  "overall_readiness": "Ready for higher responsibility / Ready with structured support / Not ready yet",
-  "pdf_report_text": "... PART B full formatted report text below ..."
+  "overall_readiness": "Ready for higher responsibility / Ready with structured support / Not ready yet"
 }
 
--------------------------------------------------------
-PART B – PDF READY REPORT TEXT (inside pdf_report_text field)
--------------------------------------------------------
-
-Generate a professional formatted assessment report as plain text with clear section headers.
-
-Title:
-RDC Plant Incharge Competency Assessment Report
-
-Include sections:
-
-1. Candidate Information
-2. Overall Performance Summary
-3. Competency Performance Highlights
-4. Key Strengths
-5. Key Development Areas
-6. Recommended Development Actions
-7. 30-60-90 Day Coaching Plan
-8. Final Readiness Statement
-
-Tone:
-
-Professional
-Constructive
-Operationally realistic
-No HR jargon
-
-Do NOT reveal question wording or model answers.
+IMPORTANT: Output ONLY the JSON object above. Do NOT add any text, headings, explanation, or markdown before or after the JSON. Do NOT include a pdf_report_text field.
 
 -------------------------------------------------------
 REPORTING RULES
