@@ -219,6 +219,16 @@ async def final_report(req: FinalReportRequest):
 
     return report_data
 
+# ─── API: Admin — Delete Session ─────────────────────────────────────────────
+@app.delete("/api/admin/session/{session_id}")
+async def delete_session(session_id: str, x_admin_token: str = Header(None)):
+    if x_admin_token != ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if session_id not in sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    del sessions[session_id]
+    return {"deleted": True}
+
 # ─── API: Download PDF ────────────────────────────────────────────────────────
 @app.get("/api/download-pdf/{session_id}")
 async def download_pdf(session_id: str, x_admin_token: str = Header(None)):

@@ -92,6 +92,9 @@
       border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; margin-left: 6px; }
     .btn-pdf:hover { background: #a5780a; }
     .btn-pdf.disabled { background: #ccc; cursor: not-allowed; }
+    .btn-del  { background: #dc3545; color: #fff; border: none; padding: 5px 12px;
+      border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; margin-left: 6px; }
+    .btn-del:hover { background: #a71d2a; }
 
     /* Empty state */
     .empty-state { text-align: center; padding: 48px 24px; color: var(--grey-mid); }
@@ -161,8 +164,8 @@
 
   <div class="dash-header">
     <div>
-      <h1>RDC – SRT Assessment Admin Panel</h1>
-      <div class="sub">Plant Incharge Competency Assessment | Confidential – Head Office Use Only</div>
+      <h1>RDC – Plant Incharge Situation Based Competency Assessment Engine</h1>
+      <div class="sub">Admin Panel | Confidential – Head Office Use Only</div>
     </div>
     <button class="dash-logout" onclick="logout()">Logout</button>
   </div>
@@ -194,6 +197,7 @@
           <th>Readiness</th>
           <th>Answered</th>
           <th>Actions</th>
+          <th>Delete</th>
         </tr>
       </thead>
       <tbody id="sessionsBody"></tbody>
@@ -359,6 +363,10 @@ function renderTable() {
             onclick="${s.has_pdf ? `downloadPdfFor('${s.session_id}')` : ''}"
             title="${s.has_pdf ? 'Download PDF' : 'PDF not available'}">⬇️ PDF</button>
         </td>
+        <td>
+          <button class="btn-del" onclick="deleteSession('${s.session_id}','${escHtml(s.candidate_name)}')"
+            title="Delete this assessment">🗑 Delete</button>
+        </td>
       </tr>`;
   });
 }
@@ -467,6 +475,19 @@ function downloadPdfFor(sid) {
       URL.revokeObjectURL(a.href);
     })
     .catch(e => alert('PDF Error: ' + e.message));
+}
+
+// ─── Delete Session ───────────────────────────────────────────────────────────
+async function deleteSession(sid, name) {
+  if (!confirm(`Delete assessment for "${name}"?\n\nThis cannot be undone.`)) return;
+  try {
+    const res = await fetch(`/api/admin/session/${sid}`, {
+      method:  'DELETE',
+      headers: { 'X-Admin-Token': adminToken },
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
+    await loadSessions();
+  } catch (e) { alert('Delete failed: ' + e.message); }
 }
 
 // ─── Close modal on backdrop click ───────────────────────────────────────────

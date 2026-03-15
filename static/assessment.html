@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>SRT Assessment – RDC</title>
+  <title>Plant Incharge – SBCA Assessment | RDC</title>
   <link rel="stylesheet" href="/static/style.css"/>
   <style>
-    /* ── Timer ── */
+    /* ── Header timer badge (compact) ── */
     .timer-wrap {
       display: flex; align-items: center; gap: 8px;
       background: var(--blue); color: #fff;
@@ -17,7 +17,48 @@
     .timer-wrap.warn  { background: #CC7700; }
     .timer-wrap.crit  { background: var(--red); animation: pulse-timer 1s infinite; }
     @keyframes pulse-timer { 0%,100%{opacity:1} 50%{opacity:.6} }
-    .timer-icon { font-size: 18px; }
+
+    /* ── Circular Timer (fixed right) ── */
+    .circle-timer-wrap {
+      position: fixed;
+      top: 50%;
+      right: 18px;
+      transform: translateY(-50%);
+      width: 114px;
+      height: 114px;
+      z-index: 300;
+      user-select: none;
+    }
+    .circle-timer-svg {
+      width: 114px;
+      height: 114px;
+      filter: drop-shadow(0 4px 16px rgba(0,0,0,.18));
+    }
+    .circle-timer-inner {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .circle-time-val {
+      font-size: 17px;
+      font-weight: 800;
+      color: var(--blue);
+      font-family: monospace;
+      line-height: 1;
+      transition: color .4s;
+    }
+    .circle-time-lbl {
+      font-size: 7px;
+      color: var(--grey-mid);
+      letter-spacing: 1.2px;
+      margin-top: 4px;
+      font-weight: 700;
+    }
+    @keyframes pulse-circle { 0%,100%{transform:translateY(-50%) scale(1)} 50%{transform:translateY(-50%) scale(1.06)} }
+    .circle-timer-wrap.crit { animation: pulse-circle 1s infinite; }
 
     /* ── Progress bar area ── */
     .progress-wrap {
@@ -80,12 +121,12 @@
   <div class="header-inner">
     <div class="header-logo">RDC</div>
     <div style="flex:1">
-      <div class="header-title">Plant Incharge – SRT Assessment</div>
+      <div class="header-title">Plant Incharge Situation Based Competency Assessment Engine</div>
       <div class="header-sub" id="candidateHeader">Loading...</div>
     </div>
-    <!-- Timer -->
+    <!-- Compact header timer -->
     <div class="timer-wrap" id="timerDisplay">
-      <span class="timer-icon">⏱</span>
+      <span>⏱</span>
       <span id="timerText">--:--</span>
     </div>
   </div>
@@ -107,7 +148,7 @@
 
 <div class="container">
   <div class="card" id="questionCard">
-    <!-- Header row: just Q number, NO competency label -->
+    <!-- Q number only — NO competency shown to candidate -->
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
       <span class="q-num-display" id="qNumDisplay" style="font-size:16px;">Q1 / 30</span>
       <span id="savedIndicator" class="saved-indicator">✓ Answer saved</span>
@@ -179,6 +220,30 @@
   </div>
 </div>
 
+<!-- Circular Timer (fixed, right side) -->
+<div class="circle-timer-wrap" id="circleTimerWrap">
+  <svg class="circle-timer-svg" viewBox="0 0 120 120">
+    <!-- White background disc -->
+    <circle cx="60" cy="60" r="56" fill="white"/>
+    <!-- Track -->
+    <circle cx="60" cy="60" r="50" fill="none" stroke="#e8ecf0" stroke-width="9"/>
+    <!-- Progress arc — rotated so it starts at 12 o'clock -->
+    <circle id="circleArc"
+            cx="60" cy="60" r="50"
+            fill="none"
+            stroke="#22c55e"
+            stroke-width="9"
+            stroke-linecap="round"
+            stroke-dasharray="314.16"
+            stroke-dashoffset="0"
+            transform="rotate(-90 60 60)"/>
+  </svg>
+  <div class="circle-timer-inner">
+    <div class="circle-time-val" id="circleTimeVal">60:00</div>
+    <div class="circle-time-lbl">TIME LEFT</div>
+  </div>
+</div>
+
 <!-- Scoring Overlay -->
 <div class="scoring-overlay" id="scoringOverlay">
   <div class="scoring-box">
@@ -218,59 +283,97 @@ if (!sessionId || !questions.length) { window.location.href = '/'; }
 document.getElementById('candidateHeader').textContent =
   `${candidate.candidate_name || ''} | ${candidate.plant_location || ''}`;
 
-let currentIdx = 0;
-let voiceMode  = false;
-let recognition = null;
-let isRecording = false;
+let currentIdx   = 0;
+let voiceMode    = false;
+let recognition  = null;
+let isRecording  = false;
+let stoppedManually = false;
 let voiceTranscriptFull = '';
-let assessmentMinutes = 90; // default, overridden by config
+let assessmentMinutes   = 60;
 let timerInterval = null;
 let timerExpired  = false;
+let totalTimerSeconds = 0;
 
-// ─── Load config & start timer ───────────────────────────────────────────────
+// Circumference for r=50: 2π×50 ≈ 314.16
+const CIRC = 2 * Math.PI * 50;
+
+// ─── Load config & start ──────────────────────────────────────────────────────
 (async () => {
   try {
     const cfg = await fetch('/api/config').then(r => r.json());
-    assessmentMinutes = cfg.assessment_minutes || 90;
+    assessmentMinutes = cfg.assessment_minutes || 60;
   } catch {}
-  startTimer(assessmentMinutes * 60);
+  totalTimerSeconds = assessmentMinutes * 60;
+  startTimer(totalTimerSeconds);
   buildPalette();
   renderQuestion(0);
 })();
 
-// ─── Timer ───────────────────────────────────────────────────────────────────
+// ─── Circular Timer ───────────────────────────────────────────────────────────
+function updateCircleTimer(remaining, total) {
+  const arc  = document.getElementById('circleArc');
+  const val  = document.getElementById('circleTimeVal');
+  const wrap = document.getElementById('circleTimerWrap');
+  if (!arc || !val) return;
+
+  const ratio  = Math.max(0, remaining / total);
+  arc.style.strokeDashoffset = CIRC * (1 - ratio);
+
+  let color;
+  if      (remaining <= 60)  { color = '#ef4444'; }   // red   – 1 min left
+  else if (remaining <= 300) { color = '#f97316'; }   // orange – 5 min left
+  else                       { color = '#22c55e'; }   // green
+
+  arc.style.stroke = color;
+
+  const m = Math.floor(remaining / 60);
+  const s = remaining % 60;
+  val.textContent = `${pad(m)}:${pad(s)}`;
+  val.style.color = remaining <= 60 ? '#ef4444' : remaining <= 300 ? '#f97316' : 'var(--blue)';
+
+  wrap.classList.toggle('crit', remaining <= 60);
+}
+
+// ─── Header Timer ─────────────────────────────────────────────────────────────
 function startTimer(totalSeconds) {
   let remaining = totalSeconds;
   const el   = document.getElementById('timerText');
   const wrap = document.getElementById('timerDisplay');
+
+  // Initial render
+  updateCircleTimer(remaining, totalSeconds);
 
   timerInterval = setInterval(() => {
     if (remaining <= 0) {
       clearInterval(timerInterval);
       timerExpired = true;
       el.textContent = '00:00';
+      updateCircleTimer(0, totalSeconds);
       onTimerExpired();
       return;
     }
     remaining--;
+
     const h = Math.floor(remaining / 3600);
     const m = Math.floor((remaining % 3600) / 60);
     const s = remaining % 60;
-    el.textContent = h > 0
-      ? `${h}:${pad(m)}:${pad(s)}`
-      : `${pad(m)}:${pad(s)}`;
+    el.textContent = h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 
-    wrap.classList.remove('warn','crit');
-    if (remaining <= 300) wrap.classList.add('crit');
-    else if (remaining <= 600) wrap.classList.add('warn');
+    // Header badge colours
+    wrap.classList.remove('warn', 'crit');
+    if      (remaining <= 60)  wrap.classList.add('crit');
+    else if (remaining <= 300) wrap.classList.add('warn');
+
+    // Circular timer
+    updateCircleTimer(remaining, totalSeconds);
   }, 1000);
 }
 
-function pad(n) { return String(n).padStart(2,'0'); }
+function pad(n) { return String(n).padStart(2, '0'); }
 
 function onTimerExpired() {
   saveCurrentAnswer();
-  const answered  = questions.filter(q => answers[q.srt_id] && answers[q.srt_id].trim()).length;
+  const answered   = questions.filter(q => answers[q.srt_id] && answers[q.srt_id].trim()).length;
   const unanswered = questions.length - answered;
   document.getElementById('timeoutMsg').innerHTML =
     `Your assessment time has expired.<br/>` +
@@ -284,7 +387,7 @@ function forceSubmit() {
   submitAssessment();
 }
 
-// ─── Q-dot Palette ───────────────────────────────────────────────────────────
+// ─── Q-dot Palette ────────────────────────────────────────────────────────────
 function buildPalette() {
   const pal = document.getElementById('qPalette');
   pal.innerHTML = '';
@@ -293,7 +396,7 @@ function buildPalette() {
     dot.className = 'q-dot' + (i === 0 ? ' current' : '');
     dot.id = `dot-${i}`;
     dot.textContent = i + 1;
-    dot.title = `Question ${i+1}`;
+    dot.title = `Question ${i + 1}`;
     dot.onclick = () => { saveCurrentAnswer(); currentIdx = i; renderQuestion(i); };
     pal.appendChild(dot);
   });
@@ -309,34 +412,30 @@ function updatePalette() {
   });
 }
 
-// ─── Render Question ─────────────────────────────────────────────────────────
+// ─── Render Question ──────────────────────────────────────────────────────────
 function renderQuestion(idx) {
   const q = questions[idx];
   if (!q) return;
 
-  // NOTE: No competency shown to candidate — only situation and Q number
-  document.getElementById('situationBox').textContent   = q.situation;
-  document.getElementById('qNumDisplay').textContent    = `Q${idx+1} / ${questions.length}`;
-  document.getElementById('progressLabel').textContent  = `Question ${idx+1} of ${questions.length}`;
-  document.getElementById('progressBar').style.width   = `${((idx+1)/questions.length)*100}%`;
+  // Situation shown — competency deliberately hidden from candidate
+  document.getElementById('situationBox').textContent  = q.situation;
+  document.getElementById('qNumDisplay').textContent   = `Q${idx + 1} / ${questions.length}`;
+  document.getElementById('progressLabel').textContent = `Question ${idx + 1} of ${questions.length}`;
+  document.getElementById('progressBar').style.width   = `${((idx + 1) / questions.length) * 100}%`;
 
-  // Answered count
   const nAnswered = questions.filter(q => answers[q.srt_id] && answers[q.srt_id].trim()).length;
   document.getElementById('answeredCount').textContent = `${nAnswered} answered`;
 
-  // Restore saved answer
   const saved = answers[q.srt_id] || '';
   document.getElementById('responseText').value = saved;
   document.getElementById('voiceTranscript').textContent = saved || 'Your spoken response will appear here...';
   voiceTranscriptFull = saved;
   updateCharCount();
 
-  // Buttons
   document.getElementById('prevBtn').disabled = (idx === 0);
   const isLast = (idx === questions.length - 1);
   document.getElementById('nextBtn').textContent = isLast ? 'Review & Submit →' : 'Next Question →';
 
-  // Show submit section only on last question
   if (isLast) {
     const nAns = questions.filter(q => answers[q.srt_id] && answers[q.srt_id].trim()).length;
     document.getElementById('answeredFinal').textContent = nAns;
@@ -349,7 +448,7 @@ function renderQuestion(idx) {
   updatePalette();
 }
 
-// ─── Navigation ──────────────────────────────────────────────────────────────
+// ─── Navigation ───────────────────────────────────────────────────────────────
 function navigate(dir) {
   saveCurrentAnswer();
   const next = currentIdx + dir;
@@ -360,7 +459,7 @@ function navigate(dir) {
 }
 
 function saveCurrentAnswer() {
-  const q = questions[currentIdx];
+  const q    = questions[currentIdx];
   const text = voiceMode
     ? voiceTranscriptFull.trim()
     : document.getElementById('responseText').value.trim();
@@ -371,7 +470,6 @@ function saveCurrentAnswer() {
     ind.classList.add('show');
     setTimeout(() => ind.classList.remove('show'), 1500);
     updatePalette();
-    // Update answered count
     const nAnswered = questions.filter(q => answers[q.srt_id] && answers[q.srt_id].trim()).length;
     document.getElementById('answeredCount').textContent = `${nAnswered} answered`;
   }
@@ -383,7 +481,7 @@ function setMode(mode) {
   voiceMode = (mode === 'voice');
   document.getElementById('typeBtn').classList.toggle('active', !voiceMode);
   document.getElementById('voiceBtn').classList.toggle('active',  voiceMode);
-  document.getElementById('typePanel').style.display  = voiceMode ? 'none'  : 'block';
+  document.getElementById('typePanel').style.display = voiceMode ? 'none' : 'block';
   document.getElementById('voicePanel').classList.toggle('show', voiceMode);
   if (voiceMode) initVoice();
 }
@@ -403,7 +501,7 @@ function debounce(fn, delay) {
   return () => { clearTimeout(debounceTimer); debounceTimer = setTimeout(fn, delay); };
 }
 
-// ─── Voice (Web Speech API) ───────────────────────────────────────────────────
+// ─── Voice (Web Speech API) — with abort-error fix ───────────────────────────
 function initVoice() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) {
@@ -411,10 +509,17 @@ function initVoice() {
     document.getElementById('micBtn').disabled = true;
     return;
   }
+
+  // Re-create recognition each time to avoid stale state
+  if (recognition) {
+    try { recognition.abort(); } catch (_) {}
+  }
+
   recognition = new SR();
-  recognition.lang = 'en-IN';
-  recognition.continuous = true;
-  recognition.interimResults = true;
+  recognition.lang            = 'en-IN';
+  recognition.continuous      = true;
+  recognition.interimResults  = true;
+  recognition.maxAlternatives = 1;
 
   recognition.onresult = (e) => {
     let interim = '', final = voiceTranscriptFull;
@@ -423,29 +528,60 @@ function initVoice() {
       else interim += e.results[i][0].transcript;
     }
     voiceTranscriptFull = final;
-    document.getElementById('voiceTranscript').textContent = final + interim;
-    document.getElementById('responseText').value = (final + interim).trim();
+    const combined = (final + interim).trim();
+    document.getElementById('voiceTranscript').textContent = combined || 'Your spoken response will appear here...';
+    document.getElementById('responseText').value = combined;
     saveCurrentAnswer();
   };
+
   recognition.onerror = (e) => {
-    document.getElementById('voiceStatus').textContent = 'Error: ' + e.error + '. Try again.';
+    // 'aborted' fires whenever stop() is called — not a real error, safely ignore
+    if (e.error === 'aborted') return;
+    // 'no-speech' is also benign — just show a gentle message
+    if (e.error === 'no-speech') {
+      document.getElementById('voiceStatus').textContent = 'No speech detected — click mic and try again.';
+      return;
+    }
+    document.getElementById('voiceStatus').textContent = '⚠️ ' + e.error + ' — please try again.';
     setRecordingState(false);
   };
-  recognition.onend = () => { if (isRecording) recognition.start(); };
+
+  recognition.onstart = () => {
+    document.getElementById('voiceStatus').textContent = '🔴 Recording… Click mic to stop';
+  };
+
+  recognition.onend = () => {
+    // Auto-restart only if user did NOT manually stop
+    if (isRecording && !stoppedManually) {
+      try { recognition.start(); } catch (_) {}
+    } else {
+      setRecordingState(false);
+      document.getElementById('voiceStatus').textContent = 'Click the microphone to start speaking';
+    }
+  };
+
   document.getElementById('micBtn').onclick = toggleVoice;
 }
 
 function toggleVoice() { isRecording ? stopVoice() : startVoice(); }
 
 function startVoice() {
-  if (!recognition) return;
-  recognition.start();
-  setRecordingState(true);
-  document.getElementById('voiceStatus').textContent = '🔴 Recording… Click mic to stop';
+  if (!recognition) initVoice();
+  stoppedManually = false;
+  try {
+    recognition.start();
+    setRecordingState(true);
+  } catch (e) {
+    // Already started — safe to ignore
+    console.warn('Voice start error (ignored):', e.message);
+  }
 }
 
 function stopVoice() {
-  if (recognition && isRecording) recognition.stop();
+  stoppedManually = true;
+  if (recognition && isRecording) {
+    try { recognition.stop(); } catch (_) {}
+  }
   setRecordingState(false);
   document.getElementById('voiceStatus').textContent = 'Click the microphone to start speaking';
 }
@@ -485,9 +621,9 @@ async function submitAssessment() {
     scoringBar.style.width   = `${(scored / total) * 100}%`;
     try {
       await fetch('/api/score-question', {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body:    JSON.stringify({
           session_id:           sessionId,
           srt_id:               q.srt_id,
           situation:            q.situation,
@@ -505,15 +641,15 @@ async function submitAssessment() {
 
   try {
     const res  = await fetch('/api/final-report', {
-      method: 'POST',
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId }),
+      body:    JSON.stringify({ session_id: sessionId }),
     });
     const data = await res.json();
     sessionStorage.setItem('rdc_report', JSON.stringify(data));
     scoringBar.style.width = '100%';
     progressText.textContent = 'Complete! Redirecting…';
-    // ── Candidate goes to THANK-YOU page, NOT the report ──
+    // Candidate goes to THANK-YOU — report is admin-only
     setTimeout(() => { window.location.href = '/thank-you'; }, 800);
   } catch (err) {
     overlay.classList.remove('show');
