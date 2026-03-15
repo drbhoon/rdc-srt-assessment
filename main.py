@@ -26,7 +26,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 # ─── Config ──────────────────────────────────────────────────────────────────
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "rdc@admin2024")
 EXCEL_PATH     = os.environ.get("EXCEL_PATH", str(Path(__file__).parent / "data" / "RDC_SRT_Master_100.xlsx"))
-ASSESSMENT_MINUTES = int(os.environ.get("ASSESSMENT_MINUTES", "90"))
+ASSESSMENT_MINUTES = int(os.environ.get("ASSESSMENT_MINUTES", "60"))
 
 # ─── Globals ─────────────────────────────────────────────────────────────────
 sessions: Dict[str, Any] = {}
