@@ -28,7 +28,7 @@ def generate_final_report(
     }
 
     message = client.messages.create(
-        model="claude-3-5-sonnet-20241022",
+        model="claude-3-haiku-20240307",
         max_tokens=8192,
         system=system_prompt,
         messages=[
