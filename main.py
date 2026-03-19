@@ -284,6 +284,26 @@ async def process_assessment_async(session_id: str) -> None:
                     "improvements": ["Not answered — counted as zero."],
                 })
 
+        # ── Step 2b: Compute all numeric fields in Python (authoritative) ─────
+        # Never trust Claude to compute derived numbers — it rounds/estimates
+        # independently for overall vs competency, causing inconsistency.
+        from collections import defaultdict
+        overall_score = sum(r["score"] for r in results)
+        normalized_score = round((overall_score / 300) * 100, 1)
+
+        comp_buckets: dict = defaultdict(list)
+        for r in results:
+            comp_buckets[r["competency"]].append(r["score"])
+        python_competency_summary = {
+            comp: round(sum(scores) / len(scores), 1)
+            for comp, scores in comp_buckets.items()
+        }
+        logger.info(
+            "Python-computed scores — total: %d/300 (%.1f%%), competency avg: %s",
+            overall_score, normalized_score,
+            {k: v for k, v in python_competency_summary.items()},
+        )
+
         # ── Step 3: Generate final report ─────────────────────────────────────
         candidate = session["candidate"]
         try:
@@ -295,6 +315,11 @@ async def process_assessment_async(session_id: str) -> None:
                 assessment_date=candidate["assessment_date"],
                 results=results,
             )
+            # Override any AI-computed numeric fields with Python ground truth.
+            # Claude only provides qualitative text; numbers are always from Python.
+            report_data["overall_score_out_of_300"]   = overall_score
+            report_data["normalized_score_out_of_100"] = normalized_score
+            report_data["competency_summary"]          = python_competency_summary
             session["report"] = report_data
             logger.info("Report generated for session %s", session_id)
         except Exception as exc:
