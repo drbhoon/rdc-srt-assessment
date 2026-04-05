@@ -34,8 +34,14 @@ def _readiness_color(text: str) -> HexColor:
     return RDC_DARK_GREY
 
 
+def _esc(text: str) -> str:
+    """Escape XML special characters for ReportLab Paragraph."""
+    if not isinstance(text, str):
+        text = str(text)
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def generate_pdf(report_data: dict, candidate: dict, output_path: str = None) -> bytes:
-    """Generate PDF and return as bytes. output_path ignored (kept for compat)."""
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf, pagesize=A4,
@@ -59,6 +65,9 @@ def generate_pdf(report_data: dict, candidate: dict, output_path: str = None) ->
     big_sty     = sty("Bg", fontName="Helvetica-Bold",    fontSize=32, textColor=RDC_BLUE,      alignment=TA_CENTER)
     slbl_sty    = sty("SL", fontName="Helvetica",         fontSize=10, textColor=RDC_MID_GREY,  alignment=TA_CENTER)
     footer_sty  = sty("F",  fontName="Helvetica-Oblique", fontSize=8,  textColor=RDC_MID_GREY,  alignment=TA_CENTER)
+    ital_sty    = sty("It", fontName="Helvetica-Oblique", fontSize=9,  textColor=RDC_MID_GREY,  spaceAfter=2, leftIndent=15, leading=13)
+    narr_sty    = sty("Nr", fontName="Helvetica",         fontSize=9,  textColor=RDC_DARK_GREY, spaceAfter=6, leading=13, leftIndent=10)
+    sublbl_sty  = sty("SbL",fontName="Helvetica-Bold",    fontSize=10, textColor=RDC_DARK_GREY, spaceAfter=2, leftIndent=5)
 
     readiness     = report_data.get("overall_readiness", "")
     readiness_col = _readiness_color(readiness)
@@ -83,9 +92,9 @@ def generate_pdf(report_data: dict, candidate: dict, output_path: str = None) ->
     # ── 1. CANDIDATE INFORMATION ─────────────────────────────────────────
     story.append(_sec("1.  Candidate Information", sec_sty))
     ci = Table([
-        [Paragraph("Name:",            label_sty), Paragraph(candidate.get("candidate_name",""),  value_sty)],
-        [Paragraph("Plant Location:",  label_sty), Paragraph(candidate.get("plant_location",""),  value_sty)],
-        [Paragraph("Assessment Date:", label_sty), Paragraph(candidate.get("assessment_date",""), value_sty)],
+        [Paragraph("Name:",            label_sty), Paragraph(_esc(candidate.get("candidate_name","")),  value_sty)],
+        [Paragraph("Plant Location:",  label_sty), Paragraph(_esc(candidate.get("plant_location","")),  value_sty)],
+        [Paragraph("Assessment Date:", label_sty), Paragraph(_esc(candidate.get("assessment_date","")), value_sty)],
         [Paragraph("Report Generated:",label_sty), Paragraph(datetime.date.today().strftime("%d %B %Y"), value_sty)],
     ], colWidths=[5*cm, 12*cm])
     ci.setStyle(TableStyle([
@@ -101,7 +110,7 @@ def generate_pdf(report_data: dict, candidate: dict, output_path: str = None) ->
     total      = report_data.get("overall_score_out_of_300", 0)
     normalized = report_data.get("normalized_score_out_of_100", 0.0)
     perf = Table([
-        [Paragraph(str(total), big_sty), Paragraph(f"{float(normalized):.1f}%", big_sty), Paragraph(readiness, read_sty)],
+        [Paragraph(str(total), big_sty), Paragraph(f"{float(normalized):.1f}%", big_sty), Paragraph(_esc(readiness), read_sty)],
         [Paragraph("Total Score (out of 300)", slbl_sty), Paragraph("Normalized Score", slbl_sty), Paragraph("Overall Readiness", slbl_sty)],
     ], colWidths=[5.5*cm, 5.5*cm, 6*cm])
     perf.setStyle(TableStyle([
@@ -119,7 +128,7 @@ def generate_pdf(report_data: dict, candidate: dict, output_path: str = None) ->
     for comp, score in (report_data.get("competency_summary") or {}).items():
         rating = _rating_label(score)
         comp_rows.append([
-            Paragraph(comp, body_sty),
+            Paragraph(_esc(comp), body_sty),
             Paragraph(f"{float(score):.1f} / 10", body_sty),
             Paragraph(rating, sty(f"Rt{rating}", fontName="Helvetica-Bold", fontSize=10, textColor=_rating_color(rating))),
         ])
@@ -133,33 +142,115 @@ def generate_pdf(report_data: dict, candidate: dict, output_path: str = None) ->
     ]))
     story += [ct, Spacer(1, 0.4*cm)]
 
-    # ── 4. KEY STRENGTHS ────────────────────────────────────────────────
-    story.append(_sec("4.  Key Strengths", sec_sty))
+    # ── 4. COMPETENCY NARRATIVES (NEW) ──────────────────────────────────
+    narratives = report_data.get("competency_narratives") or {}
+    if narratives:
+        story.append(_sec("4.  Competency-wise Assessment Narrative", sec_sty))
+        for comp_name, narrative in narratives.items():
+            story.append(Paragraph(f"<b>{_esc(comp_name)}</b>", sublbl_sty))
+            story.append(Paragraph(_esc(narrative), narr_sty))
+        story.append(Spacer(1, 0.3*cm))
+
+    # ── 5. BEHAVIORAL PROFILE (NEW) ─────────────────────────────────────
+    profile = report_data.get("behavioral_profile") or {}
+    if profile:
+        story.append(_sec("5.  Behavioral Profile", sec_sty))
+        label_map = {
+            "communication_style":      "Communication Style",
+            "decision_making_approach":  "Decision-Making Approach",
+            "leadership_orientation":    "Leadership Orientation",
+            "stress_response_pattern":   "Stress Response Pattern",
+            "accountability_stance":     "Accountability Stance",
+        }
+        for key, display in label_map.items():
+            text = profile.get(key, "")
+            if text:
+                story.append(Paragraph(f"<b>{display}:</b>", sublbl_sty))
+                story.append(Paragraph(_esc(text), narr_sty))
+        story.append(Spacer(1, 0.3*cm))
+
+    # ── 6. KEY STRENGTHS (enhanced) ─────────────────────────────────────
+    sec_num = 6
+    story.append(_sec(f"{sec_num}.  Key Strengths", sec_sty))
     for s in (report_data.get("top_strengths") or []):
-        story.append(Paragraph(f"&#10003;  {s}", bullet_sty))
+        if isinstance(s, dict):
+            strength = _esc(s.get("strength", ""))
+            evidence = _esc(s.get("evidence", ""))
+            relevance = _esc(s.get("rmc_relevance", ""))
+            story.append(Paragraph(f"&#10003;  <b>{strength}</b>", bullet_sty))
+            if evidence:
+                story.append(Paragraph(f"<i>Evidence: {evidence}</i>", ital_sty))
+            if relevance:
+                story.append(Paragraph(f"RMC Relevance: {relevance}", ital_sty))
+            story.append(Spacer(1, 0.15*cm))
+        else:
+            story.append(Paragraph(f"&#10003;  {_esc(s)}", bullet_sty))
     story.append(Spacer(1, 0.3*cm))
 
-    # ── 5. DEVELOPMENT AREAS ────────────────────────────────────────────
-    story.append(_sec("5.  Key Development Areas", sec_sty))
+    # ── 7. DEVELOPMENT AREAS (enhanced) ─────────────────────────────────
+    sec_num = 7
+    story.append(_sec(f"{sec_num}.  Key Development Areas", sec_sty))
     for d in (report_data.get("development_areas") or []):
-        story.append(Paragraph(f"&#9658;  {d}", bullet_sty))
+        if isinstance(d, dict):
+            area     = _esc(d.get("area", ""))
+            evidence = _esc(d.get("evidence", ""))
+            context  = _esc(d.get("rmc_context", ""))
+            priority = d.get("priority", "").lower()
+            pri_tag  = f" [{priority.upper()}]" if priority else ""
+            story.append(Paragraph(f"&#9658;  <b>{area}{pri_tag}</b>", bullet_sty))
+            if evidence:
+                story.append(Paragraph(f"<i>Evidence: {evidence}</i>", ital_sty))
+            if context:
+                story.append(Paragraph(f"RMC Context: {context}", ital_sty))
+            story.append(Spacer(1, 0.15*cm))
+        else:
+            story.append(Paragraph(f"&#9658;  {_esc(d)}", bullet_sty))
     story.append(Spacer(1, 0.3*cm))
 
-    # ── 6. RECOMMENDED ACTIONS ──────────────────────────────────────────
-    story.append(_sec("6.  Recommended Development Actions", sec_sty))
+    # ── 8. CROSS-COMPETENCY INSIGHTS (NEW) ──────────────────────────────
+    insights = report_data.get("cross_competency_insights") or []
+    if insights:
+        story.append(_sec("8.  Cross-Competency Behavioral Insights", sec_sty))
+        ins_rows = [[
+            Paragraph("<b>Pattern</b>", label_sty),
+            Paragraph("<b>Evidence</b>", label_sty),
+            Paragraph("<b>Implication</b>", label_sty),
+        ]]
+        for item in insights:
+            if isinstance(item, dict):
+                ins_rows.append([
+                    Paragraph(_esc(item.get("pattern", "")), body_sty),
+                    Paragraph(f"<i>{_esc(item.get('evidence', ''))}</i>", body_sty),
+                    Paragraph(_esc(item.get("implication", "")), body_sty),
+                ])
+        if len(ins_rows) > 1:
+            ins_t = Table(ins_rows, colWidths=[4.5*cm, 6.5*cm, 6*cm])
+            ins_t.setStyle(TableStyle([
+                ("BACKGROUND",(0,0),(-1,0),RDC_LIGHT_BLUE),
+                ("GRID",(0,0),(-1,-1),0.5,colors.lightgrey),
+                ("ROWBACKGROUNDS",(0,1),(-1,-1),[WHITE, RDC_LIGHT_GREY]),
+                ("VALIGN",(0,0),(-1,-1),"TOP"),
+                ("TOPPADDING",(0,0),(-1,-1),6),("BOTTOMPADDING",(0,0),(-1,-1),6),
+                ("LEFTPADDING",(0,0),(-1,-1),6),
+            ]))
+            story.append(ins_t)
+        story.append(Spacer(1, 0.3*cm))
+
+    # ── 9. RECOMMENDED ACTIONS ──────────────────────────────────────────
+    story.append(_sec("9.  Recommended Development Actions", sec_sty))
     for i, a in enumerate((report_data.get("development_actions") or []), 1):
-        story.append(Paragraph(f"{i}.  {a}", bullet_sty))
+        story.append(Paragraph(f"{i}.  {_esc(a)}", bullet_sty))
     story.append(Spacer(1, 0.3*cm))
 
-    # ── 7. 30-60-90 COACHING PLAN ───────────────────────────────────────
-    story.append(_sec("7.  30 – 60 – 90 Day Coaching Plan", sec_sty))
+    # ── 10. 30-60-90 COACHING PLAN ──────────────────────────────────────
+    story.append(_sec("10.  30 – 60 – 90 Day Coaching Plan", sec_sty))
     coaching = report_data.get("coaching_plan_30_60_90") or {}
     coach_rows = [[Paragraph("<b>Phase</b>", label_sty), Paragraph("<b>Focus Areas</b>", label_sty)]]
     for phase, lbl in [("30_days","First 30 Days"),("60_days","31 – 60 Days"),("90_days","61 – 90 Days")]:
         items = coaching.get(phase) or []
         coach_rows.append([
             Paragraph(f"<b>{lbl}</b>", label_sty),
-            Paragraph("<br/>".join(f"• {x}" for x in items), body_sty),
+            Paragraph("<br/>".join(f"&bull; {_esc(x)}" for x in items), body_sty),
         ])
     cot = Table(coach_rows, colWidths=[4*cm, 13*cm])
     cot.setStyle(TableStyle([
@@ -172,9 +263,9 @@ def generate_pdf(report_data: dict, candidate: dict, output_path: str = None) ->
     ]))
     story += [cot, Spacer(1, 0.4*cm)]
 
-    # ── 8. FINAL READINESS STATEMENT ────────────────────────────────────
-    story.append(_sec("8.  Final Readiness Statement", sec_sty))
-    rbox = Table([[Paragraph(readiness, sty("RB", fontName="Helvetica-Bold", fontSize=14,
+    # ── 11. FINAL READINESS STATEMENT ───────────────────────────────────
+    story.append(_sec("11.  Final Readiness Statement", sec_sty))
+    rbox = Table([[Paragraph(_esc(readiness), sty("RB", fontName="Helvetica-Bold", fontSize=14,
                                              textColor=readiness_col, alignment=TA_CENTER))]],
                  colWidths=[17*cm])
     rbox.setStyle(TableStyle([
@@ -184,23 +275,13 @@ def generate_pdf(report_data: dict, candidate: dict, output_path: str = None) ->
     ]))
     story.append(rbox)
 
-    # Narrative text if present
-    pdf_text = report_data.get("pdf_report_text","")
-    if pdf_text:
-        story += [Spacer(1,0.5*cm), HRFlowable(width="100%",thickness=1,color=RDC_BLUE),
-                  Spacer(1,0.2*cm), Paragraph("<b>Assessor Notes</b>", label_sty)]
-        for line in pdf_text.split("\n"):
-            line = line.strip()
-            if line:
-                story.append(Paragraph(line, body_sty))
-
     # ── FOOTER ──────────────────────────────────────────────────────────
     story += [
         Spacer(1, 0.5*cm),
         HRFlowable(width="100%", thickness=0.5, color=RDC_MID_GREY),
         Paragraph(
             "This report is confidential and intended for authorised RDC management use only. "
-            "Powered by RDC SRT Assessment Engine v2.0",
+            "Powered by RDC SRT Assessment Engine v4.0",
             footer_sty
         ),
     ]

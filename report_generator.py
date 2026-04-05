@@ -36,8 +36,15 @@ def generate_final_report(
                 "role": "user",
                 "content": (
                     "Generate the final assessment report. "
+                    "All 30 candidate transcripts are included in the results array — "
+                    "analyze behavioral patterns across ALL responses holistically. "
+                    "Identify cross-competency signals (e.g., a Cost question response may "
+                    "reveal Communication or Integrity traits). "
+                    "Ground every observation in specific phrases from the candidate's actual words. "
+                    "Apply RMC India operational context (SARTAJ, batching plant, transit mixers, "
+                    "monsoon, vendor/contractor dynamics). "
                     "You MUST respond with ONLY a valid JSON object — no prose, no markdown, "
-                    "no explanation before or after. Start your response with '{' and end with '}'.\n\n"
+                    "no explanation before or after. Start with '{' and end with '}'.\n\n"
                     f"{json.dumps(input_data, indent=2, ensure_ascii=False)}"
                 ),
             },

@@ -4,6 +4,7 @@ import uuid
 import logging
 from pathlib import Path
 from typing import Dict, Any
+from collections import defaultdict
 
 import anthropic
 from fastapi import FastAPI, HTTPException, Header, BackgroundTasks
@@ -15,12 +16,16 @@ from question_bank import load_questions, get_session_questions
 from scorer import score_question
 from report_generator import generate_final_report
 from pdf_generator import generate_pdf
+from database import (
+    init_db, create_session, get_session, update_session,
+    delete_session as db_delete_session, list_sessions, reset_session,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ─── App Setup ───────────────────────────────────────────────────────────────
-app = FastAPI(title="RDC SBCA Engine", version="3.0")
+app = FastAPI(title="RDC SBCA Engine", version="4.0")
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -30,9 +35,17 @@ EXCEL_PATH         = os.environ.get("EXCEL_PATH", str(Path(__file__).parent / "d
 ASSESSMENT_MINUTES = int(os.environ.get("ASSESSMENT_MINUTES", "60"))
 
 # ─── Globals ─────────────────────────────────────────────────────────────────
-sessions:     Dict[str, Any] = {}
 questions_db = load_questions(EXCEL_PATH)
 client       = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+
+# In-memory cache for active sessions (synced to DB on key events)
+_cache: Dict[str, Any] = {}
+
+
+@app.on_event("startup")
+async def startup():
+    init_db()
+
 
 # ─── Page Routes ─────────────────────────────────────────────────────────────
 @app.get("/")
@@ -71,37 +84,29 @@ async def admin_login(payload: dict):
         return {"success": True, "token": ADMIN_PASSWORD}
     raise HTTPException(status_code=401, detail="Invalid password")
 
+# ─── Helper: get session from cache or DB ────────────────────────────────────
+def _get(session_id: str) -> dict | None:
+    if session_id in _cache:
+        return _cache[session_id]
+    session = get_session(session_id)
+    if session:
+        _cache[session_id] = session
+    return session
+
+
 # ─── API: Admin — List Sessions ──────────────────────────────────────────────
 @app.get("/api/admin/sessions")
-async def list_sessions(x_admin_token: str = Header(None)):
+async def admin_list_sessions(x_admin_token: str = Header(None)):
     if x_admin_token != ADMIN_PASSWORD:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    result = []
-    for sid, s in sessions.items():
-        c      = s.get("candidate", {})
-        report = s.get("report", {})
-        result.append({
-            "session_id":         sid,
-            "candidate_name":     c.get("candidate_name", ""),
-            "plant_location":     c.get("plant_location", ""),
-            "assessment_date":    c.get("assessment_date", ""),
-            "status":             s.get("status", "in_progress"),
-            "total_score":        report.get("overall_score_out_of_300"),
-            "normalized":         report.get("normalized_score_out_of_100"),
-            "readiness":          report.get("overall_readiness", "—"),
-            "questions_answered": len(s.get("scores", {})),
-            "has_pdf":            "pdf_bytes" in s,
-            "error":              s.get("error"),
-        })
-    result.sort(key=lambda x: x["assessment_date"], reverse=True)
-    return result
+    return list_sessions()
 
 # ─── API: Admin — Get Report ─────────────────────────────────────────────────
 @app.get("/api/admin/report/{session_id}")
 async def get_report(session_id: str, x_admin_token: str = Header(None)):
     if x_admin_token != ADMIN_PASSWORD:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    session = sessions.get(session_id)
+    session = _get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     report = session.get("report")
@@ -111,24 +116,21 @@ async def get_report(session_id: str, x_admin_token: str = Header(None)):
 
 # ─── API: Admin — Delete Session ─────────────────────────────────────────────
 @app.delete("/api/admin/session/{session_id}")
-async def delete_session(session_id: str, x_admin_token: str = Header(None)):
+async def delete_session_endpoint(session_id: str, x_admin_token: str = Header(None)):
     if x_admin_token != ADMIN_PASSWORD:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    if session_id not in sessions:
+    _cache.pop(session_id, None)
+    if not db_delete_session(session_id):
         raise HTTPException(status_code=404, detail="Session not found")
-    del sessions[session_id]
     return {"deleted": True}
 
-# ─── API: Admin — Quick Test (creates dummy session without answering questions)
+# ─── API: Admin — Quick Test ─────────────────────────────────────────────────
 @app.post("/api/admin/quick-test")
 async def admin_quick_test(
     payload: dict,
     background_tasks: BackgroundTasks,
     x_admin_token: str = Header(None),
 ):
-    """Admin-only: spin up a test session with auto-generated dummy answers.
-    Use this to verify the scoring + report pipeline without sitting an assessment.
-    """
     if x_admin_token != ADMIN_PASSWORD:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
@@ -142,7 +144,6 @@ async def admin_quick_test(
     }
     questions = get_session_questions(questions_db, per_competency=3)
 
-    # Generic answer that will produce non-zero scores from Claude
     dummy_answer = (
         "I would first assess the situation carefully by reviewing all available data "
         "and consulting with my team and relevant stakeholders. I would identify the "
@@ -153,54 +154,39 @@ async def admin_quick_test(
     )
     dummy_answers = {q["srt_id"]: dummy_answer for q in questions}
 
-    sessions[session_id] = {
-        "candidate":          candidate,
-        "questions":          questions,
-        "scores":             {},
-        "status":             "processing",
-        "progress":           0,
-        "collected_answers":  dummy_answers,
-    }
+    session = create_session(session_id, candidate, questions)
+    session["collected_answers"] = dummy_answers
+    session["status"] = "processing"
+    _cache[session_id] = session
+    update_session(session_id, status="processing", collected_answers=dummy_answers)
 
     background_tasks.add_task(process_assessment_async, session_id)
     logger.info("Admin quick-test session %s started (%d questions)", session_id, len(questions))
     return {"session_id": session_id, "status": "processing", "total": len(questions)}
 
 
-# ─── API: Admin — Force Reset stuck session ───────────────────────────────────
+# ─── API: Admin — Force Reset stuck session ──────────────────────────────────
 @app.post("/api/admin/force-reset/{session_id}")
-async def force_reset_session(session_id: str, x_admin_token: str = Header(None)):
-    """Reset a stuck / failed session back to in_progress so the candidate can resubmit."""
+async def force_reset_endpoint(session_id: str, x_admin_token: str = Header(None)):
     if x_admin_token != ADMIN_PASSWORD:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    session = sessions.get(session_id)
+    session = _get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-
-    session["status"]   = "in_progress"
-    session["progress"] = 0
-    session.pop("error",             None)
-    session.pop("report",            None)
-    session.pop("pdf_bytes",         None)
-    session.pop("pdf_error",         None)
-    session.pop("collected_answers", None)
-    session["scores"] = {}
+    reset_session(session_id)
+    _cache.pop(session_id, None)
     logger.info("Admin force-reset session %s", session_id)
     return {"reset": True, "session_id": session_id}
 
 
-# ─── API: Start Session ───────────────────────────────────────────────────────
+# ─── API: Start Session ─────────────────────────────────────────────────────
 @app.post("/api/start-session")
 async def start_session(candidate: CandidateInfo):
     session_id = str(uuid.uuid4())
     questions  = get_session_questions(questions_db, per_competency=3)
-    sessions[session_id] = {
-        "candidate": candidate.model_dump(),
-        "questions": questions,
-        "scores":    {},
-        "status":    "in_progress",
-        "progress":  0,
-    }
+    session    = create_session(session_id, candidate.model_dump(), questions)
+    _cache[session_id] = session
+
     safe_questions = [
         {
             "question_number":      q["question_number"],
@@ -213,24 +199,24 @@ async def start_session(candidate: CandidateInfo):
     ]
     return {"session_id": session_id, "questions": safe_questions, "total_questions": len(questions)}
 
-# ─── BACKGROUND TASK: Process entire assessment asynchronously ────────────────
+# ─── BACKGROUND TASK: Process entire assessment asynchronously ───────────────
 async def process_assessment_async(session_id: str) -> None:
     """Score all questions + generate report in a background thread pool.
     Uses asyncio.to_thread so the synchronous Anthropic SDK never blocks the event loop.
-    A master try/except guarantees session["status"] is always updated — no silent hangs.
     """
-    session = sessions.get(session_id)
+    session = _get(session_id)
     if not session:
         return
 
-    try:  # ← MASTER GUARD: ensures status is always set even on unexpected crash
+    try:
         questions         = session["questions"]
         collected_answers = session.get("collected_answers", {})
         total             = len(questions)
 
         logger.info("Starting background processing for session %s (%d questions)", session_id, total)
 
-        # ── Step 1: Score every question ──────────────────────────────────────
+        # ── Step 1: Score every question ─────────────────────────────────────
+        scores = session.get("scores", {})
         for i, q in enumerate(questions):
             srt_id     = q["srt_id"]
             transcript = collected_answers.get(srt_id, "").strip()
@@ -254,40 +240,47 @@ async def process_assessment_async(session_id: str) -> None:
                     "improvements": [f"Scoring error: {str(exc)[:80]}"],
                 }
 
-            session["scores"][srt_id] = {
+            scores[srt_id] = {
                 "competency":   q["primary_competency"],
                 "score":        int(result.get("total", 0)),
                 "strengths":    result.get("strengths", []),
                 "improvements": result.get("improvements", []),
                 "details":      result,
             }
+            session["scores"]   = scores
             session["progress"] = i + 1
+            # Persist progress every 5 questions
+            if (i + 1) % 5 == 0 or (i + 1) == total:
+                update_session(session_id, scores=scores, progress=i + 1)
             logger.info("Scored %d/%d for session %s", i + 1, total, session_id)
 
-        # ── Step 2: Build results array (unanswered = 0) ──────────────────────
+        # ── Step 2: Build results array with transcripts for deep analysis ───
         results = []
         for q in questions:
             srt_id = q["srt_id"]
-            if srt_id in session["scores"]:
-                sc = session["scores"][srt_id]
+            if srt_id in scores:
+                sc = scores[srt_id]
                 results.append({
-                    "competency":   sc["competency"],
-                    "score":        sc["score"],
-                    "strengths":    sc["strengths"],
-                    "improvements": sc["improvements"],
+                    "competency":           sc["competency"],
+                    "secondary_competency": q.get("secondary_competency", ""),
+                    "situation":            q["situation"],
+                    "transcript":           collected_answers.get(srt_id, ""),
+                    "score":                sc["score"],
+                    "strengths":            sc["strengths"],
+                    "improvements":         sc["improvements"],
                 })
             else:
                 results.append({
-                    "competency":   q["primary_competency"],
-                    "score":        0,
-                    "strengths":    [],
-                    "improvements": ["Not answered — counted as zero."],
+                    "competency":           q["primary_competency"],
+                    "secondary_competency": q.get("secondary_competency", ""),
+                    "situation":            q["situation"],
+                    "transcript":           "",
+                    "score":                0,
+                    "strengths":            [],
+                    "improvements":         ["Not answered — counted as zero."],
                 })
 
-        # ── Step 2b: Compute all numeric fields in Python (authoritative) ─────
-        # Never trust Claude to compute derived numbers — it rounds/estimates
-        # independently for overall vs competency, causing inconsistency.
-        from collections import defaultdict
+        # ── Step 2b: Compute all numeric fields in Python (authoritative) ────
         overall_score = sum(r["score"] for r in results)
         normalized_score = round((overall_score / 300) * 100, 1)
 
@@ -295,16 +288,15 @@ async def process_assessment_async(session_id: str) -> None:
         for r in results:
             comp_buckets[r["competency"]].append(r["score"])
         python_competency_summary = {
-            comp: round(sum(scores) / len(scores), 1)
-            for comp, scores in comp_buckets.items()
+            comp: round(sum(sc) / len(sc), 1)
+            for comp, sc in comp_buckets.items()
         }
         logger.info(
-            "Python-computed scores — total: %d/300 (%.1f%%), competency avg: %s",
+            "Python-computed scores — total: %d/300 (%.1f%%)",
             overall_score, normalized_score,
-            {k: v for k, v in python_competency_summary.items()},
         )
 
-        # ── Step 3: Generate final report ─────────────────────────────────────
+        # ── Step 3: Generate final report ────────────────────────────────────
         candidate = session["candidate"]
         try:
             report_data = await asyncio.to_thread(
@@ -315,42 +307,46 @@ async def process_assessment_async(session_id: str) -> None:
                 assessment_date=candidate["assessment_date"],
                 results=results,
             )
-            # Override any AI-computed numeric fields with Python ground truth.
-            # Claude only provides qualitative text; numbers are always from Python.
+            # Override numeric fields with Python ground truth
             report_data["overall_score_out_of_300"]   = overall_score
             report_data["normalized_score_out_of_100"] = normalized_score
             report_data["competency_summary"]          = python_competency_summary
             session["report"] = report_data
+            update_session(session_id, report=report_data)
             logger.info("Report generated for session %s", session_id)
         except Exception as exc:
             logger.error("Report generation failed for %s: %s", session_id, exc, exc_info=True)
             session["status"] = "failed"
             session["error"]  = str(exc)
+            update_session(session_id, status="failed", error=str(exc))
             return
 
-        # ── Step 4: Generate PDF ───────────────────────────────────────────────
+        # ── Step 4: Generate PDF ─────────────────────────────────────────────
         try:
             pdf_bytes = await asyncio.to_thread(generate_pdf, report_data=report_data, candidate=candidate)
             session["pdf_bytes"] = pdf_bytes
+            update_session(session_id, pdf_bytes=pdf_bytes)
             logger.info("PDF generated (%d bytes) for session %s", len(pdf_bytes), session_id)
         except Exception as exc:
             logger.error("PDF failed for %s: %s", session_id, exc, exc_info=True)
             session["pdf_error"] = str(exc)
+            update_session(session_id, pdf_error=str(exc))
 
         session["status"] = "completed"
+        update_session(session_id, status="completed")
         logger.info("Session %s fully completed", session_id)
 
-    except Exception as exc:  # ← catches anything the inner handlers missed
+    except Exception as exc:
         logger.error("FATAL background task error for session %s: %s", session_id, exc, exc_info=True)
         session["status"] = "failed"
         session["error"]  = f"Unexpected error: {str(exc)}"
+        update_session(session_id, status="failed", error=f"Unexpected error: {str(exc)}")
 
 
-# ─── API: Submit All Answers (new primary submit endpoint) ────────────────────
+# ─── API: Submit All Answers ─────────────────────────────────────────────────
 @app.post("/api/submit-all")
 async def submit_all(req: SubmitAllRequest, background_tasks: BackgroundTasks):
-    """Accept all answers at once, return immediately, process in background."""
-    session = sessions.get(req.session_id)
+    session = _get(req.session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     if session.get("status") == "processing":
@@ -359,6 +355,7 @@ async def submit_all(req: SubmitAllRequest, background_tasks: BackgroundTasks):
     session["collected_answers"] = req.answers
     session["status"]            = "processing"
     session["progress"]          = 0
+    update_session(req.session_id, collected_answers=req.answers, status="processing", progress=0)
 
     background_tasks.add_task(process_assessment_async, req.session_id)
     logger.info("Submitted session %s with %d answers", req.session_id, len(req.answers))
@@ -368,7 +365,7 @@ async def submit_all(req: SubmitAllRequest, background_tasks: BackgroundTasks):
 # ─── API: Poll submission status ─────────────────────────────────────────────
 @app.get("/api/submission-status/{session_id}")
 async def submission_status(session_id: str):
-    session = sessions.get(session_id)
+    session = _get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return {
@@ -379,12 +376,12 @@ async def submission_status(session_id: str):
     }
 
 
-# ─── API: Download PDF ────────────────────────────────────────────────────────
+# ─── API: Download PDF ──────────────────────────────────────────────────────
 @app.get("/api/download-pdf/{session_id}")
 async def download_pdf(session_id: str, x_admin_token: str = Header(None)):
     if x_admin_token != ADMIN_PASSWORD:
         raise HTTPException(status_code=401, detail="Unauthorized — admin only")
-    session = sessions.get(session_id)
+    session = _get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     pdf_bytes = session.get("pdf_bytes")
