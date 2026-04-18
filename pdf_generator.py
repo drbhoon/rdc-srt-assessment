@@ -6,7 +6,7 @@ from reportlab.lib.units import cm
 from reportlab.lib import colors
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-    HRFlowable, KeepTogether
+    HRFlowable, KeepTogether, PageBreak
 )
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
 from reportlab.lib.colors import HexColor
@@ -274,6 +274,87 @@ def generate_pdf(report_data: dict, candidate: dict, output_path: str = None) ->
         ("TOPPADDING",(0,0),(-1,-1),12),("BOTTOMPADDING",(0,0),(-1,-1),12),
     ]))
     story.append(rbox)
+
+    # ── 12. CANDIDATE RESPONSE APPENDIX (NEW) ───────────────────────────
+    appendix = report_data.get("transcript_appendix") or []
+    if appendix:
+        story.append(PageBreak())
+        story.append(_sec("12.  Candidate Response Appendix", sec_sty))
+        story.append(Paragraph(
+            "Verbatim responses captured during the assessment. Each block shows the "
+            "situation presented, the candidate's own words, and the score awarded.",
+            ital_sty,
+        ))
+        story.append(Spacer(1, 0.3*cm))
+
+        sit_sty = sty("QS", fontName="Helvetica-Oblique", fontSize=9,
+                      textColor=RDC_DARK_GREY, leading=13, leftIndent=6, rightIndent=6,
+                      spaceAfter=2)
+        trans_sty = sty("QT", fontName="Helvetica", fontSize=10,
+                        textColor=RDC_DARK_GREY, leading=14, leftIndent=6, rightIndent=6,
+                        spaceAfter=2, alignment=TA_LEFT)
+        qhdr_sty = sty("QH", fontName="Helvetica-Bold", fontSize=10,
+                       textColor=WHITE, leading=13)
+        score_sty = sty("QScore", fontName="Helvetica-Bold", fontSize=10,
+                        textColor=WHITE, alignment=TA_CENTER)
+        flag_sty = sty("QF", fontName="Helvetica-Oblique", fontSize=8,
+                       textColor=RDC_MID_GREY, leftIndent=6, spaceAfter=6)
+        resp_lbl = sty("QL", fontName="Helvetica-Bold", fontSize=9,
+                       textColor=RDC_BLUE, leftIndent=6, spaceAfter=2, spaceBefore=2)
+
+        for item in appendix:
+            qn        = item.get("question_number", "?")
+            comp      = _esc(item.get("competency", ""))
+            situation = _esc(item.get("situation", ""))
+            transcript= (item.get("transcript") or "").strip()
+            score     = item.get("score", 0)
+
+            if not transcript:
+                flag = "Not answered"
+            elif len(transcript) < 30:
+                flag = f"Partial response ({len(transcript)} chars)"
+            else:
+                flag = "Answered"
+
+            # Preserve paragraph breaks in the transcript (reportlab HTML)
+            transcript_html = _esc(transcript).replace("\n", "<br/>") if transcript else "<i>(no response)</i>"
+
+            # Header row: Q# + competency | score
+            q_hdr = Table([
+                [
+                    Paragraph(f"Q{qn} &nbsp; &mdash; &nbsp; {comp}", qhdr_sty),
+                    Paragraph(f"{int(score)} / 10", score_sty),
+                ]
+            ], colWidths=[13.5*cm, 3.5*cm])
+            q_hdr.setStyle(TableStyle([
+                ("BACKGROUND",(0,0),(-1,-1), RDC_BLUE),
+                ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+                ("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5),
+                ("LEFTPADDING",(0,0),(-1,-1),10),("RIGHTPADDING",(0,0),(-1,-1),10),
+            ]))
+
+            # Situation box (shaded)
+            sit_box = Table(
+                [[Paragraph(f"<b>Situation:</b> {situation}", sit_sty)]],
+                colWidths=[17*cm],
+            )
+            sit_box.setStyle(TableStyle([
+                ("BACKGROUND",(0,0),(-1,-1), RDC_LIGHT_GREY),
+                ("BOX",(0,0),(-1,-1),0.25,colors.lightgrey),
+                ("TOPPADDING",(0,0),(-1,-1),6),("BOTTOMPADDING",(0,0),(-1,-1),6),
+                ("LEFTPADDING",(0,0),(-1,-1),8),("RIGHTPADDING",(0,0),(-1,-1),8),
+            ]))
+
+            # Keep each Q-block together when possible
+            block = KeepTogether([
+                q_hdr,
+                sit_box,
+                Paragraph("Candidate Response:", resp_lbl),
+                Paragraph(transcript_html, trans_sty),
+                Paragraph(f"Status: {flag}", flag_sty),
+                Spacer(1, 0.25*cm),
+            ])
+            story.append(block)
 
     # ── FOOTER ──────────────────────────────────────────────────────────
     story += [

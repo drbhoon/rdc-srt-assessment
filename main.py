@@ -179,6 +179,117 @@ async def force_reset_endpoint(session_id: str, x_admin_token: str = Header(None
     return {"reset": True, "session_id": session_id}
 
 
+# ─── API: Admin — Rescore a single session from persisted transcripts ────────
+@app.post("/api/admin/rescore/{session_id}")
+async def rescore_session(
+    session_id: str,
+    background_tasks: BackgroundTasks,
+    x_admin_token: str = Header(None),
+):
+    """Re-run scoring + report + PDF against transcripts already in collected_answers.
+    No candidate involvement needed — answers are loaded from Postgres.
+    """
+    if x_admin_token != ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    session = _get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    collected = session.get("collected_answers") or {}
+    if not collected:
+        raise HTTPException(
+            status_code=400,
+            detail="Session has no stored candidate answers — cannot rescore.",
+        )
+
+    # Wipe derived artifacts, preserve questions + collected_answers
+    session["scores"]    = {}
+    session["report"]    = None
+    session["pdf_bytes"] = None
+    session["pdf_error"] = None
+    session["error"]     = None
+    session["status"]    = "processing"
+    session["progress"]  = 0
+    _cache[session_id]   = session
+
+    update_session(
+        session_id,
+        scores={},
+        report=None,
+        pdf_bytes=None,
+        pdf_error=None,
+        error=None,
+        status="processing",
+        progress=0,
+    )
+
+    background_tasks.add_task(process_assessment_async, session_id)
+    logger.info("Admin rescore scheduled for session %s (%d answers)", session_id, len(collected))
+    return {"status": "rescoring", "session_id": session_id, "answers": len(collected)}
+
+
+# ─── API: Admin — Rescore all sessions with suspicious zero scores ───────────
+@app.post("/api/admin/rescore-all-zeros")
+async def rescore_all_zeros(
+    background_tasks: BackgroundTasks,
+    x_admin_token: str = Header(None),
+):
+    """Find completed sessions where any question has score=0 but the transcript is
+    non-empty in collected_answers, and schedule a rescore for each.
+    """
+    if x_admin_token != ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    scheduled: list[str] = []
+    skipped:   list[dict] = []
+
+    for row in list_sessions():
+        sid = row["session_id"]
+        if row.get("status") != "completed":
+            continue
+
+        session = _get(sid)
+        if not session:
+            continue
+
+        collected = session.get("collected_answers") or {}
+        scores    = session.get("scores") or {}
+        if not collected or not scores:
+            skipped.append({"session_id": sid, "reason": "no transcripts or scores"})
+            continue
+
+        # Has at least one question scored 0 where transcript is non-empty?
+        has_suspicious_zero = any(
+            (sc.get("score", 0) == 0)
+            and (collected.get(srt_id, "") or "").strip()
+            for srt_id, sc in scores.items()
+        )
+        if not has_suspicious_zero:
+            continue
+
+        # Wipe derived artifacts
+        session["scores"]    = {}
+        session["report"]    = None
+        session["pdf_bytes"] = None
+        session["pdf_error"] = None
+        session["error"]     = None
+        session["status"]    = "processing"
+        session["progress"]  = 0
+        _cache[sid]          = session
+        update_session(
+            sid,
+            scores={}, report=None, pdf_bytes=None, pdf_error=None,
+            error=None, status="processing", progress=0,
+        )
+
+        background_tasks.add_task(process_assessment_async, sid)
+        scheduled.append(sid)
+
+    logger.info("Bulk rescore scheduled: %d sessions (skipped: %d)", len(scheduled), len(skipped))
+    return {"scheduled": scheduled, "count": len(scheduled), "skipped": skipped}
+
+
 # ─── API: Start Session ─────────────────────────────────────────────────────
 @app.post("/api/start-session")
 async def start_session(candidate: CandidateInfo):
@@ -311,6 +422,19 @@ async def process_assessment_async(session_id: str) -> None:
             report_data["overall_score_out_of_300"]   = overall_score
             report_data["normalized_score_out_of_100"] = normalized_score
             report_data["competency_summary"]          = python_competency_summary
+
+            # Attach verbatim transcript appendix for PDF Section 12
+            report_data["transcript_appendix"] = [
+                {
+                    "question_number": i + 1,
+                    "competency":      r["competency"],
+                    "situation":       r["situation"],
+                    "transcript":      r["transcript"],
+                    "score":           r["score"],
+                }
+                for i, r in enumerate(results)
+            ]
+
             session["report"] = report_data
             update_session(session_id, report=report_data)
             logger.info("Report generated for session %s", session_id)

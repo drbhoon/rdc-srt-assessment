@@ -132,6 +132,14 @@ Return JSON only.
 
 Maximum total score per SRT = 10
 
+MODE 1 BREVITY GUARDRAIL (STRICT):
+- strengths: 1–2 items, max 15 words each.
+- improvements: 1–2 items, max 15 words each.
+- Keep the full JSON response under 400 output tokens.
+- Do NOT add any fields other than those shown above.
+- Do NOT include explanatory prose outside the JSON.
+- Do NOT wrap in markdown code fences.
+
 -------------------------------------------------------
 MODE 2 : "final_report"
 -------------------------------------------------------
