@@ -397,10 +397,17 @@ function renderTable() {
   document.getElementById('emptyState').style.display = 'none';
 
   filtered.forEach((s, i) => {
-    const isDone   = s.status === 'completed';
-    const readyCls = readinessClass(s.readiness);
-    const scoreStr = typeof s.total_score === 'number' ? s.total_score : '—';
-    const normStr  = typeof s.normalized === 'number' ? s.normalized.toFixed(1) + '%' : '—';
+    const isDone      = s.status === 'completed';
+    const hasFullAnsw = (s.questions_answered || 0) >= 30;
+    // Rescore is safe whenever scoring is complete (30/30) — covers both
+    // normal completed sessions AND sessions killed mid-pipeline by a deploy.
+    const canRescore  = hasFullAnsw;
+    // Reset wipes transcripts — only offer it when the candidate hasn't
+    // finished answering (genuinely stuck early), never on a 30/30 session.
+    const canReset    = !isDone && !hasFullAnsw;
+    const readyCls    = readinessClass(s.readiness);
+    const scoreStr    = typeof s.total_score === 'number' ? s.total_score : '—';
+    const normStr     = typeof s.normalized === 'number' ? s.normalized.toFixed(1) + '%' : '—';
 
     body.innerHTML += `
       <tr>
@@ -418,8 +425,8 @@ function renderTable() {
           <button class="btn-pdf ${s.has_pdf ? '' : 'disabled'}"
             onclick="${s.has_pdf ? `downloadPdfFor('${s.session_id}')` : ''}"
             title="${s.has_pdf ? 'Download PDF' : 'PDF not available'}">⬇️ PDF</button>
-          ${isDone ? `<button class="btn-rescore" onclick="rescoreSession('${s.session_id}','${escHtml(s.candidate_name)}')" title="Re-score this session from stored transcripts (no candidate involvement needed)">🔁 Rescore</button>` : ''}
-          ${!isDone ? `<button class="btn-reset" onclick="resetSession('${s.session_id}','${escHtml(s.candidate_name)}')" title="Reset stuck session so candidate can resubmit">↺ Reset</button>` : ''}
+          ${canRescore ? `<button class="btn-rescore" onclick="rescoreSession('${s.session_id}','${escHtml(s.candidate_name)}')" title="${isDone ? 'Re-score this session from stored transcripts (no candidate involvement needed)' : 'Session got stuck mid-pipeline (likely killed by a deploy). All 30 answers are safe — click to resume cleanly from stored transcripts.'}">🔁 Rescore</button>` : ''}
+          ${canReset ? `<button class="btn-reset" onclick="resetSession('${s.session_id}','${escHtml(s.candidate_name)}')" title="Reset stuck session — WIPES stored answers, candidate must re-take the test. Use only when 30/30 answers are NOT yet submitted.">↺ Reset</button>` : ''}
         </td>
         <td>
           <button class="btn-del" onclick="deleteSession('${s.session_id}','${escHtml(s.candidate_name)}')"
