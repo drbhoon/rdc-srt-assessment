@@ -101,9 +101,6 @@
     .btn-rescore { background: #17a2b8; color: #fff; border: none; padding: 5px 12px;
       border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; margin-left: 6px; }
     .btn-rescore:hover { background: #117a8b; }
-    .btn-bulk-rescore { background: #17a2b8; color: #fff; border: none; padding: 8px 16px;
-      border-radius: 7px; cursor: pointer; font-size: 13px; font-weight: 600; }
-    .btn-bulk-rescore:hover { background: #117a8b; }
 
     /* Quick Test modal */
     .qt-modal-bg {
@@ -211,7 +208,6 @@
     <button class="btn-refresh" onclick="loadSessions()">↻ Refresh</button>
     <button class="btn btn-outline btn-sm" onclick="window.location.href='/'">+ New Assessment</button>
     <button class="btn btn-primary btn-sm" onclick="openQuickTest()" title="Run a full pipeline test without answering 30 questions">🧪 Quick Test</button>
-    <button class="btn-bulk-rescore" onclick="rescoreAllZeros()" title="Rescore every completed session where a question scored 0 despite having a transcript on file">🔁 Rescore All Zero-Affected</button>
   </div>
 
   <div class="table-wrap">
@@ -572,25 +568,6 @@ async function rescoreSession(sid, name) {
     alert(`✅ Rescore started for "${name}".\nThe report will refresh in 2–3 minutes. Click Refresh to see updated scores.`);
     await loadSessions();
   } catch (e) { alert('Rescore failed: ' + e.message); }
-}
-
-// ─── Bulk rescore — every session with suspicious zero scores ────────────────
-async function rescoreAllZeros() {
-  if (!confirm(`Rescore ALL completed sessions that have any question scored 0 despite having a stored transcript?\n\nThis fixes the zero-score bug retroactively. Each session takes 2–3 minutes. Proceed?`)) return;
-  try {
-    const res = await fetch('/api/admin/rescore-all-zeros', {
-      method:  'POST',
-      headers: { 'X-Admin-Token': adminToken },
-    });
-    if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
-    const d = await res.json();
-    if (d.count === 0) {
-      alert('✅ No sessions needed rescoring — all zero scores have real empty transcripts.');
-    } else {
-      alert(`🔁 Rescore scheduled for ${d.count} session(s).\nClick Refresh in a few minutes to see updated scores.\n\nSession IDs:\n${d.scheduled.map(x=>x.slice(0,8)).join(', ')}`);
-    }
-    await loadSessions();
-  } catch (e) { alert('Bulk rescore failed: ' + e.message); }
 }
 
 // ─── Force-Reset stuck session ────────────────────────────────────────────────

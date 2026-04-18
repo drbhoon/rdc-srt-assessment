@@ -41,6 +41,28 @@ client       = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", "
 # In-memory cache for active sessions (synced to DB on key events)
 _cache: Dict[str, Any] = {}
 
+# Caps concurrent rescores so rapid-fire clicks don't stampede the Anthropic
+# rate limit. Live candidate submissions go through a separate path and are
+# NOT gated by this semaphore — they always proceed immediately.
+_RESCORE_MAX_CONCURRENT = 2
+_rescore_semaphore: asyncio.Semaphore | None = None
+
+
+def _get_rescore_semaphore() -> asyncio.Semaphore:
+    """Lazily instantiate the semaphore on first use so it binds to the live event loop."""
+    global _rescore_semaphore
+    if _rescore_semaphore is None:
+        _rescore_semaphore = asyncio.Semaphore(_RESCORE_MAX_CONCURRENT)
+    return _rescore_semaphore
+
+
+async def _rescore_guarded(session_id: str) -> None:
+    """Queue-friendly rescore wrapper: at most _RESCORE_MAX_CONCURRENT run at once."""
+    sem = _get_rescore_semaphore()
+    async with sem:
+        logger.info("Rescore semaphore acquired for %s (cap=%d)", session_id, _RESCORE_MAX_CONCURRENT)
+        await process_assessment_async(session_id)
+
 
 @app.on_event("startup")
 async def startup():
@@ -224,70 +246,14 @@ async def rescore_session(
         progress=0,
     )
 
-    background_tasks.add_task(process_assessment_async, session_id)
-    logger.info("Admin rescore scheduled for session %s (%d answers)", session_id, len(collected))
+    background_tasks.add_task(_rescore_guarded, session_id)
+    logger.info(
+        "Admin rescore scheduled for session %s (%d answers, queued behind semaphore cap=%d)",
+        session_id, len(collected), _RESCORE_MAX_CONCURRENT,
+    )
     return {"status": "rescoring", "session_id": session_id, "answers": len(collected)}
 
 
-# ─── API: Admin — Rescore all sessions with suspicious zero scores ───────────
-@app.post("/api/admin/rescore-all-zeros")
-async def rescore_all_zeros(
-    background_tasks: BackgroundTasks,
-    x_admin_token: str = Header(None),
-):
-    """Find completed sessions where any question has score=0 but the transcript is
-    non-empty in collected_answers, and schedule a rescore for each.
-    """
-    if x_admin_token != ADMIN_PASSWORD:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    scheduled: list[str] = []
-    skipped:   list[dict] = []
-
-    for row in list_sessions():
-        sid = row["session_id"]
-        if row.get("status") != "completed":
-            continue
-
-        session = _get(sid)
-        if not session:
-            continue
-
-        collected = session.get("collected_answers") or {}
-        scores    = session.get("scores") or {}
-        if not collected or not scores:
-            skipped.append({"session_id": sid, "reason": "no transcripts or scores"})
-            continue
-
-        # Has at least one question scored 0 where transcript is non-empty?
-        has_suspicious_zero = any(
-            (sc.get("score", 0) == 0)
-            and (collected.get(srt_id, "") or "").strip()
-            for srt_id, sc in scores.items()
-        )
-        if not has_suspicious_zero:
-            continue
-
-        # Wipe derived artifacts
-        session["scores"]    = {}
-        session["report"]    = None
-        session["pdf_bytes"] = None
-        session["pdf_error"] = None
-        session["error"]     = None
-        session["status"]    = "processing"
-        session["progress"]  = 0
-        _cache[sid]          = session
-        update_session(
-            sid,
-            scores={}, report=None, pdf_bytes=None, pdf_error=None,
-            error=None, status="processing", progress=0,
-        )
-
-        background_tasks.add_task(process_assessment_async, sid)
-        scheduled.append(sid)
-
-    logger.info("Bulk rescore scheduled: %d sessions (skipped: %d)", len(scheduled), len(skipped))
-    return {"scheduled": scheduled, "count": len(scheduled), "skipped": skipped}
 
 
 # ─── API: Start Session ─────────────────────────────────────────────────────
