@@ -23,7 +23,7 @@ def _get_conn():
 
 
 def init_db():
-    """Create sessions table if it doesn't exist."""
+    """Create sessions + access_codes tables if they don't exist."""
     if not DATABASE_URL:
         logger.warning("DATABASE_URL not set — using in-memory storage (data lost on restart)")
         return
@@ -49,8 +49,17 @@ def init_db():
                     created_at       TIMESTAMP DEFAULT NOW()
                 )
             """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS access_codes (
+                    code        TEXT PRIMARY KEY,
+                    label       TEXT,
+                    max_uses    INTEGER DEFAULT 10,
+                    used_count  INTEGER DEFAULT 0,
+                    created_at  TIMESTAMP DEFAULT NOW()
+                )
+            """)
         conn.commit()
-        logger.info("PostgreSQL sessions table ready")
+        logger.info("PostgreSQL sessions + access_codes tables ready")
     finally:
         conn.close()
 
@@ -246,6 +255,147 @@ def list_sessions() -> List[dict]:
                     "error":              row[8],
                 })
             return result
+    finally:
+        conn.close()
+
+
+# ── Access Codes (10-digit HR-shared codes, up to 10 uses each) ──────────────
+
+_memory_codes: Dict[str, dict] = {}
+
+
+def create_access_code(code: str, label: str = "", max_uses: int = 10) -> dict:
+    """Insert a new access code. Caller generates the 10-digit string."""
+    record = {
+        "code":       code,
+        "label":      label or "",
+        "max_uses":   max_uses,
+        "used_count": 0,
+    }
+
+    if not DATABASE_URL:
+        _memory_codes[code] = record
+        return record
+
+    conn = _get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO access_codes (code, label, max_uses, used_count)
+                   VALUES (%s, %s, %s, 0)""",
+                (code, label or "", max_uses),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return record
+
+
+def get_access_code(code: str) -> Optional[dict]:
+    """Return the access_code record or None if not found."""
+    if not DATABASE_URL:
+        return _memory_codes.get(code)
+
+    conn = _get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT code, label, max_uses, used_count, created_at
+                   FROM access_codes WHERE code = %s""",
+                (code,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return {
+                "code":       row[0],
+                "label":      row[1] or "",
+                "max_uses":   row[2],
+                "used_count": row[3],
+                "created_at": row[4].isoformat() if row[4] else None,
+            }
+    finally:
+        conn.close()
+
+
+def consume_access_code(code: str) -> Optional[dict]:
+    """Atomically increment used_count if the code exists and has uses left.
+    Returns the updated record on success, or None if invalid / exhausted.
+    """
+    if not DATABASE_URL:
+        rec = _memory_codes.get(code)
+        if not rec:
+            return None
+        if rec["used_count"] >= rec["max_uses"]:
+            return None
+        rec["used_count"] += 1
+        return rec
+
+    conn = _get_conn()
+    try:
+        with conn.cursor() as cur:
+            # Atomic increment — only succeeds if room remains
+            cur.execute(
+                """UPDATE access_codes
+                   SET used_count = used_count + 1
+                   WHERE code = %s AND used_count < max_uses
+                   RETURNING code, label, max_uses, used_count""",
+                (code,),
+            )
+            row = cur.fetchone()
+            conn.commit()
+            if not row:
+                return None
+            return {
+                "code":       row[0],
+                "label":      row[1] or "",
+                "max_uses":   row[2],
+                "used_count": row[3],
+            }
+    finally:
+        conn.close()
+
+
+def list_access_codes() -> List[dict]:
+    """Return all access codes, newest first."""
+    if not DATABASE_URL:
+        rows = list(_memory_codes.values())
+        return sorted(rows, key=lambda x: x.get("code", ""), reverse=True)
+
+    conn = _get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT code, label, max_uses, used_count, created_at
+                   FROM access_codes ORDER BY created_at DESC"""
+            )
+            result = []
+            for row in cur.fetchall():
+                result.append({
+                    "code":       row[0],
+                    "label":      row[1] or "",
+                    "max_uses":   row[2],
+                    "used_count": row[3],
+                    "created_at": row[4].isoformat() if row[4] else None,
+                })
+            return result
+    finally:
+        conn.close()
+
+
+def delete_access_code(code: str) -> bool:
+    """Delete an access code. Returns True if found and deleted."""
+    if not DATABASE_URL:
+        return _memory_codes.pop(code, None) is not None
+
+    conn = _get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM access_codes WHERE code = %s", (code,))
+            deleted = cur.rowcount > 0
+        conn.commit()
+        return deleted
     finally:
         conn.close()
 

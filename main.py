@@ -1,5 +1,6 @@
 import asyncio
 import os
+import random
 import uuid
 import logging
 from pathlib import Path
@@ -11,7 +12,10 @@ from fastapi import FastAPI, HTTPException, Header, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
 
-from models import CandidateInfo, ScoreRequest, FinalReportRequest, SubmitAllRequest
+from models import (
+    CandidateInfo, ScoreRequest, FinalReportRequest, SubmitAllRequest,
+    AccessCodeValidate, AccessCodeGenerate,
+)
 from question_bank import load_questions, get_session_questions
 from scorer import score_question
 from report_generator import generate_final_report
@@ -19,6 +23,8 @@ from pdf_generator import generate_pdf
 from database import (
     init_db, create_session, get_session, update_session,
     delete_session as db_delete_session, list_sessions, reset_session,
+    create_access_code, get_access_code, consume_access_code,
+    list_access_codes, delete_access_code,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -256,9 +262,102 @@ async def rescore_session(
 
 
 
+# ─── API: Admin — Generate Access Code ───────────────────────────────────────
+def _fresh_access_code(max_tries: int = 6) -> str:
+    """Produce a 10-digit numeric code that doesn't clash with an existing one."""
+    for _ in range(max_tries):
+        candidate_code = f"{random.randint(10**9, 10**10 - 1)}"
+        if not get_access_code(candidate_code):
+            return candidate_code
+    # Extremely unlikely fallback — just return a candidate; collision risk ~1 in 9B
+    return f"{random.randint(10**9, 10**10 - 1)}"
+
+
+@app.post("/api/admin/generate-code")
+async def admin_generate_code(
+    payload: AccessCodeGenerate,
+    x_admin_token: str = Header(None),
+):
+    """Generate a fresh 10-digit access code (max 10 uses by default)."""
+    if x_admin_token != ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    max_uses = int(payload.max_uses or 10)
+    if max_uses < 1 or max_uses > 100:
+        raise HTTPException(status_code=400, detail="max_uses must be between 1 and 100")
+
+    code   = _fresh_access_code()
+    record = create_access_code(code, label=payload.label or "", max_uses=max_uses)
+    logger.info("Admin generated new access code %s (max_uses=%d, label=%r)",
+                code, max_uses, payload.label or "")
+    return record
+
+
+@app.get("/api/admin/access-codes")
+async def admin_list_codes(x_admin_token: str = Header(None)):
+    if x_admin_token != ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return list_access_codes()
+
+
+@app.delete("/api/admin/access-code/{code}")
+async def admin_delete_code(code: str, x_admin_token: str = Header(None)):
+    if x_admin_token != ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if not delete_access_code(code):
+        raise HTTPException(status_code=404, detail="Code not found")
+    return {"deleted": True, "code": code}
+
+
+# ─── API: Candidate — Validate Access Code (read-only check) ─────────────────
+@app.post("/api/validate-code")
+async def validate_code(payload: AccessCodeValidate):
+    """Public endpoint — checks code exists and has uses remaining.
+    Does NOT consume the code (that happens at start-session).
+    """
+    code = (payload.code or "").strip()
+    if not code or not code.isdigit() or len(code) != 10:
+        raise HTTPException(status_code=400, detail="Access code must be exactly 10 digits.")
+
+    record = get_access_code(code)
+    if not record:
+        raise HTTPException(status_code=404, detail="Invalid access code. Please check with HR.")
+    if record["used_count"] >= record["max_uses"]:
+        raise HTTPException(
+            status_code=410,
+            detail=f"This access code has been fully used ({record['used_count']}/{record['max_uses']}). Please request a new one from HR.",
+        )
+    return {
+        "valid":      True,
+        "max_uses":   record["max_uses"],
+        "used_count": record["used_count"],
+        "remaining":  record["max_uses"] - record["used_count"],
+    }
+
+
 # ─── API: Start Session ─────────────────────────────────────────────────────
 @app.post("/api/start-session")
 async def start_session(candidate: CandidateInfo):
+    # Validate + atomically consume the access code
+    code = (candidate.access_code or "").strip()
+    if not code or not code.isdigit() or len(code) != 10:
+        raise HTTPException(status_code=400, detail="A valid 10-digit access code is required.")
+
+    consumed = consume_access_code(code)
+    if not consumed:
+        # Either code doesn't exist or it's exhausted — distinguish for UX
+        rec = get_access_code(code)
+        if not rec:
+            raise HTTPException(status_code=404, detail="Invalid access code. Please check with HR.")
+        raise HTTPException(
+            status_code=410,
+            detail=f"This access code has been fully used ({rec['used_count']}/{rec['max_uses']}). Please request a new one from HR.",
+        )
+    logger.info(
+        "Access code %s consumed (%d/%d used)",
+        code, consumed["used_count"], consumed["max_uses"],
+    )
+
     session_id = str(uuid.uuid4())
     questions  = get_session_questions(questions_db, per_competency=3)
     session    = create_session(session_id, candidate.model_dump(), questions)
@@ -388,6 +487,20 @@ async def process_assessment_async(session_id: str) -> None:
             report_data["overall_score_out_of_300"]   = overall_score
             report_data["normalized_score_out_of_100"] = normalized_score
             report_data["competency_summary"]          = python_competency_summary
+
+            # ── Readiness floor (3-tier rule) ────────────────────────────────
+            # Below 50% normalized → force "Not ready yet" regardless of what
+            # Claude concluded. Above 50%, keep Claude's holistic judgment
+            # (Ready for higher responsibility / Ready with structured support).
+            claude_readiness = (report_data.get("overall_readiness") or "").strip()
+            if normalized_score < 50:
+                report_data["overall_readiness"] = "Not ready yet"
+                if claude_readiness.lower() not in ("not ready yet", "not yet ready"):
+                    logger.info(
+                        "Readiness floor applied for %s: %.1f%% < 50%% — "
+                        "overriding '%s' → 'Not ready yet'",
+                        session_id, normalized_score, claude_readiness,
+                    )
 
             # Attach verbatim transcript appendix for PDF Section 12
             report_data["transcript_appendix"] = [

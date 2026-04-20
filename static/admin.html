@@ -102,6 +102,66 @@
       border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; margin-left: 6px; }
     .btn-rescore:hover { background: #117a8b; }
 
+    /* Access code modal */
+    .ac-modal-bg {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55);
+      z-index: 2000; justify-content: center; align-items: center;
+      padding: 20px; overflow-y: auto;
+    }
+    .ac-modal-bg.show { display: flex; }
+    .ac-modal-box {
+      background: #fff; border-radius: 14px; width: 100%; max-width: 560px;
+      padding: 32px; position: relative; box-shadow: 0 8px 40px rgba(0,51,102,.18);
+      margin: auto;
+    }
+    .ac-code-display {
+      background: var(--blue-light); border: 2px dashed var(--blue);
+      border-radius: 10px; padding: 18px; text-align: center;
+      margin: 16px 0;
+    }
+    .ac-code-value {
+      font-family: 'Courier New', monospace;
+      font-size: 30px; font-weight: 800; letter-spacing: 6px;
+      color: var(--blue);
+    }
+    .ac-code-meta {
+      font-size: 12px; color: var(--grey-mid); margin-top: 6px;
+    }
+    .ac-btn-copy {
+      background: var(--gold); color: #fff; border: none;
+      padding: 7px 14px; border-radius: 6px; cursor: pointer;
+      font-size: 12px; font-weight: 600; margin-top: 10px;
+    }
+    .ac-btn-copy:hover { background: #a5780a; }
+    .ac-share-url {
+      word-break: break-all; background: #f7faff;
+      padding: 10px 14px; border-radius: 7px;
+      font-family: 'Courier New', monospace; font-size: 12px;
+      color: var(--blue); margin-top: 8px;
+    }
+    .ac-list-wrap {
+      margin-top: 24px; border-top: 1px solid #eef1f6; padding-top: 16px;
+    }
+    .ac-list-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 0; border-bottom: 1px solid #f0f3f8; font-size: 13px;
+    }
+    .ac-list-code {
+      font-family: 'Courier New', monospace; font-weight: 700;
+      color: var(--blue); font-size: 14px; letter-spacing: 2px; flex: 1;
+    }
+    .ac-list-usage {
+      padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;
+    }
+    .ac-usage-free { background: #d4edda; color: #155724; }
+    .ac-usage-part { background: #fff3cd; color: #856404; }
+    .ac-usage-full { background: #f8d7da; color: #721c24; }
+    .ac-btn-small-del {
+      background: #dc3545; color: #fff; border: none; padding: 3px 9px;
+      border-radius: 5px; cursor: pointer; font-size: 11px; font-weight: 600;
+    }
+    .ac-btn-small-del:hover { background: #a71d2a; }
+
     /* Quick Test modal */
     .qt-modal-bg {
       display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55);
@@ -206,7 +266,7 @@
   <div class="toolbar">
     <input type="text" id="searchInput" placeholder="🔍 Search by name or plant…" oninput="renderTable()"/>
     <button class="btn-refresh" onclick="loadSessions()">↻ Refresh</button>
-    <button class="btn btn-outline btn-sm" onclick="window.location.href='/'">+ New Assessment</button>
+    <button class="btn btn-outline btn-sm" onclick="openAccessCodeModal()" title="Generate a 10-digit access code HR can share with up to 10 candidates">+ New Assessment</button>
     <button class="btn btn-primary btn-sm" onclick="openQuickTest()" title="Run a full pipeline test without answering 30 questions">🧪 Quick Test</button>
   </div>
 
@@ -262,6 +322,54 @@
       <div class="qt-bar-inner" id="qt-bar"></div>
     </div>
     <div id="qt-sid" style="margin-top:10px;font-size:11px;color:#888;word-break:break-all;"></div>
+  </div>
+</div>
+
+<!-- ── ACCESS CODE MODAL ────────────────────────────────────────────────────── -->
+<div class="ac-modal-bg" id="acModal">
+  <div class="ac-modal-box">
+    <button class="modal-close" onclick="closeAccessCodeModal()">✕</button>
+    <div class="modal-title">🔑 New Assessment — Generate Access Code</div>
+    <div class="modal-sub" style="margin-bottom:14px;">
+      Generate a 10-digit access code that HR can share with candidates.
+      Up to <strong>10 candidates</strong> can use the same code to start their assessment.
+    </div>
+
+    <div class="form-group">
+      <label>Optional Label (for your reference only)</label>
+      <input type="text" id="ac-label" placeholder="e.g., Bangalore batch 1 / Nov-2026"
+             style="width:100%;padding:8px 12px;border:1px solid #d0d9e6;border-radius:7px;font-size:13px;"/>
+    </div>
+
+    <div style="margin-top:14px;">
+      <button class="btn btn-primary" id="ac-gen-btn" onclick="generateAccessCode()" style="width:100%;">
+        ✨ Generate New 10-Digit Code
+      </button>
+    </div>
+
+    <!-- Newly generated code panel -->
+    <div id="ac-new-code-wrap" style="display:none;">
+      <div class="ac-code-display">
+        <div style="font-size:12px;color:var(--grey-mid);margin-bottom:4px;">NEW ACCESS CODE</div>
+        <div class="ac-code-value" id="ac-new-code">0000000000</div>
+        <div class="ac-code-meta" id="ac-new-meta">Up to 10 uses · share with HR</div>
+        <button class="ac-btn-copy" onclick="copyAccessCode()">📋 Copy Code</button>
+      </div>
+      <div style="font-size:12px;color:var(--grey-mid);">Shareable assessment link:</div>
+      <div class="ac-share-url" id="ac-share-url">—</div>
+      <button class="ac-btn-copy" onclick="copyShareUrl()" style="background:var(--blue);margin-top:6px;">📋 Copy Link</button>
+    </div>
+
+    <!-- List of existing codes -->
+    <div class="ac-list-wrap">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <strong style="font-size:13px;color:var(--blue);">Existing Access Codes</strong>
+        <button class="btn-refresh" style="padding:4px 10px;font-size:11px;" onclick="loadAccessCodes()">↻ Refresh</button>
+      </div>
+      <div id="ac-list" style="font-size:13px;">
+        <div style="color:var(--grey-mid);padding:10px 0;">Loading…</div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -590,6 +698,121 @@ async function resetSession(sid, name) {
     await loadSessions();
   } catch (e) { alert('Reset failed: ' + e.message); }
 }
+
+// ─── Access Code Modal ───────────────────────────────────────────────────────
+function openAccessCodeModal() {
+  document.getElementById('ac-label').value        = '';
+  document.getElementById('ac-new-code-wrap').style.display = 'none';
+  document.getElementById('ac-gen-btn').disabled   = false;
+  document.getElementById('ac-gen-btn').innerHTML  = '✨ Generate New 10-Digit Code';
+  document.getElementById('acModal').classList.add('show');
+  loadAccessCodes();
+}
+
+function closeAccessCodeModal() {
+  document.getElementById('acModal').classList.remove('show');
+}
+
+async function generateAccessCode() {
+  const btn    = document.getElementById('ac-gen-btn');
+  const label  = document.getElementById('ac-label').value.trim();
+
+  btn.disabled  = true;
+  btn.innerHTML = '⏳ Generating…';
+
+  try {
+    const res = await fetch('/api/admin/generate-code', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken },
+      body:    JSON.stringify({ label, max_uses: 10 }),
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
+    const d = await res.json();
+
+    document.getElementById('ac-new-code').textContent = d.code;
+    document.getElementById('ac-new-meta').textContent =
+      `${d.max_uses - d.used_count} of ${d.max_uses} slots available` +
+      (d.label ? ` · ${d.label}` : '');
+    const shareUrl = `${window.location.origin}/?code=${d.code}`;
+    document.getElementById('ac-share-url').textContent = shareUrl;
+    document.getElementById('ac-new-code-wrap').style.display = 'block';
+
+    btn.disabled  = false;
+    btn.innerHTML = '✨ Generate Another Code';
+
+    // Refresh the codes list
+    await loadAccessCodes();
+  } catch (e) {
+    alert('Failed to generate code: ' + e.message);
+    btn.disabled  = false;
+    btn.innerHTML = '✨ Generate New 10-Digit Code';
+  }
+}
+
+async function copyAccessCode() {
+  const code = document.getElementById('ac-new-code').textContent.trim();
+  try { await navigator.clipboard.writeText(code); alert(`✅ Code "${code}" copied to clipboard.`); }
+  catch (_) { prompt('Copy the code manually:', code); }
+}
+
+async function copyShareUrl() {
+  const url = document.getElementById('ac-share-url').textContent.trim();
+  try { await navigator.clipboard.writeText(url); alert(`✅ Shareable link copied.`); }
+  catch (_) { prompt('Copy the link manually:', url); }
+}
+
+async function loadAccessCodes() {
+  const listEl = document.getElementById('ac-list');
+  listEl.innerHTML = '<div style="color:var(--grey-mid);padding:10px 0;">Loading…</div>';
+  try {
+    const res = await fetch('/api/admin/access-codes', {
+      headers: { 'X-Admin-Token': adminToken },
+    });
+    if (!res.ok) throw new Error('Failed to load codes');
+    const codes = await res.json();
+
+    if (!codes.length) {
+      listEl.innerHTML = '<div style="color:var(--grey-mid);padding:10px 0;">No access codes yet. Generate one above.</div>';
+      return;
+    }
+
+    listEl.innerHTML = '';
+    codes.forEach(c => {
+      const used   = c.used_count;
+      const max    = c.max_uses;
+      const free   = max - used;
+      const badgeCls = free === 0 ? 'ac-usage-full' : (used > 0 ? 'ac-usage-part' : 'ac-usage-free');
+      const label  = c.label ? ` · ${escHtml(c.label)}` : '';
+
+      listEl.innerHTML += `
+        <div class="ac-list-row">
+          <div class="ac-list-code">${escHtml(c.code)}</div>
+          <div style="flex:1;font-size:11px;color:var(--grey-mid);">${label || ''}</div>
+          <span class="ac-list-usage ${badgeCls}">${used} / ${max}</span>
+          <button class="ac-btn-small-del" onclick="deleteAccessCode('${c.code}')" title="Delete this code">🗑</button>
+        </div>`;
+    });
+  } catch (e) {
+    listEl.innerHTML = `<div style="color:var(--red);padding:10px 0;">Error: ${escHtml(e.message)}</div>`;
+  }
+}
+
+async function deleteAccessCode(code) {
+  if (!confirm(`Delete access code ${code}?\n\nAny unused slots will be lost. Sessions already started remain unaffected.`)) return;
+  try {
+    const res = await fetch(`/api/admin/access-code/${code}`, {
+      method:  'DELETE',
+      headers: { 'X-Admin-Token': adminToken },
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
+    await loadAccessCodes();
+  } catch (e) { alert('Delete failed: ' + e.message); }
+}
+
+// Close access-code modal on backdrop click
+document.getElementById('acModal').addEventListener('click', function(e) {
+  if (e.target === this) closeAccessCodeModal();
+});
 
 // ─── Quick Test ───────────────────────────────────────────────────────────────
 let qtSessionId   = null;

@@ -36,6 +36,30 @@
     .stat-num  { font-size: 30px; font-weight: 800; color: var(--gold); }
     .stat-lbl  { font-size: 12px; color: #aac8e8; margin-top: 2px; }
     .form-note { font-size: 12px; color: var(--grey-mid); margin-top: 6px; }
+
+    /* Access code entry */
+    .code-input {
+      font-size: 22px !important;
+      font-family: 'Courier New', monospace;
+      letter-spacing: 6px;
+      text-align: center;
+      font-weight: 700;
+      color: var(--blue);
+    }
+    .code-meta {
+      display: none;
+      background: #d4edda; color: #155724;
+      padding: 8px 14px; border-radius: 7px;
+      font-size: 12px; font-weight: 600;
+      margin-top: 10px;
+    }
+    .code-err {
+      display: none;
+      background: #f8d7da; color: #721c24;
+      padding: 8px 14px; border-radius: 7px;
+      font-size: 13px; margin-top: 10px;
+    }
+    #registrationCard { display: none; }
   </style>
 </head>
 <body>
@@ -75,7 +99,33 @@
 </div>
 
 <div class="container">
-  <div class="card">
+
+  <!-- Step 1: Access Code Entry -->
+  <div class="card" id="codeCard">
+    <div class="card-title">🔑 Access Code</div>
+    <div class="alert alert-info">
+      Enter the 10-digit access code shared by HR to proceed with your assessment.
+    </div>
+    <form id="codeForm">
+      <div class="form-group">
+        <label>10-Digit Access Code *</label>
+        <input type="text" id="accessCode" class="code-input"
+               placeholder="0000000000"
+               inputmode="numeric" pattern="[0-9]{10}"
+               maxlength="10" autocomplete="off" required />
+      </div>
+      <div style="margin-top:8px;">
+        <button type="submit" class="btn btn-primary" id="codeBtn">
+          <span>Validate Code →</span>
+        </button>
+      </div>
+      <div class="code-meta" id="codeMeta"></div>
+      <div class="code-err"  id="codeErr"></div>
+    </form>
+  </div>
+
+  <!-- Step 2: Candidate Registration (hidden until code is valid) -->
+  <div class="card" id="registrationCard">
     <div class="card-title">📋 Candidate Registration</div>
     <div class="alert alert-info">
       Please fill in accurate details. These will appear on the final assessment report.
@@ -120,16 +170,90 @@
   // Set today's date as default
   document.getElementById('assessmentDate').value = new Date().toISOString().split('T')[0];
 
+  let validatedCode = '';
+
+  // Digits-only live filter on the code input
+  const codeInput = document.getElementById('accessCode');
+  codeInput.addEventListener('input', () => {
+    codeInput.value = codeInput.value.replace(/\D+/g, '').slice(0, 10);
+  });
+
+  // Pre-fill code from URL: /?code=1234567890
+  const urlCode = new URLSearchParams(window.location.search).get('code');
+  if (urlCode && /^\d{10}$/.test(urlCode)) {
+    codeInput.value = urlCode;
+  }
+
+  async function parseErr(res) {
+    try { const j = await res.json(); return j.detail || JSON.stringify(j); }
+    catch (_) { return await res.text(); }
+  }
+
+  // Step 1: Validate access code
+  document.getElementById('codeForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn     = document.getElementById('codeBtn');
+    const metaEl  = document.getElementById('codeMeta');
+    const errEl   = document.getElementById('codeErr');
+    const code    = codeInput.value.trim();
+
+    metaEl.style.display = 'none';
+    errEl.style.display  = 'none';
+
+    if (!/^\d{10}$/.test(code)) {
+      errEl.textContent     = 'Please enter exactly 10 digits.';
+      errEl.style.display   = 'block';
+      return;
+    }
+
+    btn.disabled  = true;
+    btn.innerHTML = '<span>Validating…</span>';
+
+    try {
+      const res = await fetch('/api/validate-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:   JSON.stringify({ code }),
+      });
+      if (!res.ok) throw new Error(await parseErr(res));
+      const d = await res.json();
+
+      validatedCode = code;
+      codeInput.disabled = true;
+      btn.style.display  = 'none';
+      metaEl.textContent = `✅ Code valid — ${d.remaining} of ${d.max_uses} slots available.`;
+      metaEl.style.display = 'block';
+
+      // Reveal the registration card
+      document.getElementById('registrationCard').style.display = 'block';
+      document.getElementById('candidateName').focus();
+      document.getElementById('registrationCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (err) {
+      errEl.textContent   = '❌ ' + err.message;
+      errEl.style.display = 'block';
+      btn.disabled        = false;
+      btn.innerHTML       = '<span>Validate Code →</span>';
+    }
+  });
+
+  // Step 2: Begin assessment (sends access code along with registration)
   document.getElementById('regForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('startBtn');
+
+    if (!validatedCode) {
+      alert('Please validate your access code first.');
+      return;
+    }
+
     btn.disabled = true;
     btn.innerHTML = '<span>Starting...</span>';
 
     const payload = {
-      candidate_name: document.getElementById('candidateName').value.trim(),
-      plant_location: document.getElementById('plantLocation').value.trim(),
+      candidate_name:  document.getElementById('candidateName').value.trim(),
+      plant_location:  document.getElementById('plantLocation').value.trim(),
       assessment_date: document.getElementById('assessmentDate').value,
+      access_code:     validatedCode,
     };
 
     try {
@@ -139,14 +263,16 @@
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await parseErr(res));
       const data = await res.json();
 
-      // Store session data
+      // Store session data (strip code before persisting — not needed downstream)
+      const candForStore = { ...payload };
+      delete candForStore.access_code;
       sessionStorage.setItem('rdc_session_id', data.session_id);
-      sessionStorage.setItem('rdc_questions', JSON.stringify(data.questions));
-      sessionStorage.setItem('rdc_candidate', JSON.stringify(payload));
-      sessionStorage.setItem('rdc_answers', JSON.stringify({}));
+      sessionStorage.setItem('rdc_questions',  JSON.stringify(data.questions));
+      sessionStorage.setItem('rdc_candidate',  JSON.stringify(candForStore));
+      sessionStorage.setItem('rdc_answers',    JSON.stringify({}));
 
       window.location.href = '/assessment';
     } catch (err) {

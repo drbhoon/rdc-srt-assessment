@@ -6,6 +6,16 @@ class CandidateInfo(BaseModel):
     candidate_name: str
     plant_location: str
     assessment_date: str
+    access_code: Optional[str] = None  # 10-digit HR-shared code; required for public flow
+
+
+class AccessCodeValidate(BaseModel):
+    code: str
+
+
+class AccessCodeGenerate(BaseModel):
+    label: Optional[str] = None
+    max_uses: Optional[int] = 10
 
 
 class ScoreRequest(BaseModel):

@@ -293,6 +293,19 @@ Return ONLY this JSON object, nothing else:
   "overall_readiness": "Ready for higher responsibility / Ready with structured support / Not ready yet"
 }
 
+READINESS TIER RULE (STRICT):
+- "Not ready yet"                     → use whenever normalized_score_out_of_100 < 50
+                                         OR the candidate shows critical gaps across
+                                         most competencies (safety, integrity, basic
+                                         operational understanding).
+- "Ready with structured support"     → normalized_score 50–74 with clear development needs.
+- "Ready for higher responsibility"   → normalized_score ≥ 75 with strong, evidence-
+                                         based responses across most competencies.
+
+Note: The application layer enforces the <50% floor automatically — any score below
+50 normalized will be reported as "Not ready yet" regardless of your verdict. Still
+apply the rule in your judgment so narratives stay consistent with the tier shown.
+
 Provide exactly 3-5 items in cross_competency_insights.
 Provide exactly 5 items in top_strengths.
 Provide exactly 5 items in development_areas.
