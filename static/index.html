@@ -178,11 +178,9 @@
     codeInput.value = codeInput.value.replace(/\D+/g, '').slice(0, 10);
   });
 
-  // Pre-fill code from URL: /?code=1234567890
-  const urlCode = new URLSearchParams(window.location.search).get('code');
-  if (urlCode && /^\d{10}$/.test(urlCode)) {
-    codeInput.value = urlCode;
-  }
+  // NOTE: Access code is NEVER pre-filled from URL or elsewhere. HR shares
+  // the code with the candidate only when they are online for the test —
+  // this is an anti-cheating requirement. The candidate must type it in.
 
   async function parseErr(res) {
     try { const j = await res.json(); return j.detail || JSON.stringify(j); }

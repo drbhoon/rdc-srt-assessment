@@ -355,9 +355,14 @@
         <div class="ac-code-meta" id="ac-new-meta">Up to 10 uses · share with HR</div>
         <button class="ac-btn-copy" onclick="copyAccessCode()">📋 Copy Code</button>
       </div>
-      <div style="font-size:12px;color:var(--grey-mid);">Shareable assessment link:</div>
+
+      <div style="background:#fff8e1;border-left:4px solid var(--gold);padding:12px 14px;border-radius:6px;font-size:12px;color:#5a4500;margin-top:10px;line-height:1.6;">
+        <strong>🔒 Anti-cheating rule:</strong> Share the code with the candidate
+        <em>only</em> when they are online and ready to begin. Never include the
+        code in the assessment link. Send the candidate this common URL only:
+      </div>
       <div class="ac-share-url" id="ac-share-url">—</div>
-      <button class="ac-btn-copy" onclick="copyShareUrl()" style="background:var(--blue);margin-top:6px;">📋 Copy Link</button>
+      <button class="ac-btn-copy" onclick="copyShareUrl()" style="background:var(--blue);margin-top:6px;">📋 Copy Assessment URL</button>
     </div>
 
     <!-- List of existing codes -->
@@ -733,7 +738,8 @@ async function generateAccessCode() {
     document.getElementById('ac-new-meta').textContent =
       `${d.max_uses - d.used_count} of ${d.max_uses} slots available` +
       (d.label ? ` · ${d.label}` : '');
-    const shareUrl = `${window.location.origin}/?code=${d.code}`;
+    // Common assessment URL — NEVER includes the code (anti-cheating requirement).
+    const shareUrl = `${window.location.origin}/`;
     document.getElementById('ac-share-url').textContent = shareUrl;
     document.getElementById('ac-new-code-wrap').style.display = 'block';
 
@@ -757,8 +763,8 @@ async function copyAccessCode() {
 
 async function copyShareUrl() {
   const url = document.getElementById('ac-share-url').textContent.trim();
-  try { await navigator.clipboard.writeText(url); alert(`✅ Shareable link copied.`); }
-  catch (_) { prompt('Copy the link manually:', url); }
+  try { await navigator.clipboard.writeText(url); alert(`✅ Assessment URL copied. Share this link now; share the access code separately only when the candidate is online.`); }
+  catch (_) { prompt('Copy the URL manually:', url); }
 }
 
 async function loadAccessCodes() {
