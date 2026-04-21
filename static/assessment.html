@@ -217,16 +217,21 @@
   </div>
 </div>
 
-<!-- Timeout Modal -->
+<!-- Timeout Modal — hard lock + auto-submit, no dismissable button -->
 <div class="timeout-modal" id="timeoutModal">
   <div class="timeout-box">
     <div class="timeout-icon">⏰</div>
-    <div class="timeout-title">Time's Up!</div>
+    <div class="timeout-title" style="color:#CC0000;">Time Over — Please Submit Now</div>
     <div class="timeout-msg" id="timeoutMsg">
-      Your assessment time has expired.<br/>
-      Your answered questions will now be submitted automatically.
+      Your 60-minute assessment window has ended.<br/>
+      Your responses are being submitted automatically…
     </div>
-    <button class="btn btn-primary" onclick="forceSubmit()">Submit Now →</button>
+    <div style="margin-top:14px;">
+      <div class="qt-bar-outer" style="background:#eef1f6;border-radius:6px;height:10px;overflow:hidden;">
+        <div id="autoSubmitBar" style="height:100%;background:var(--red);width:0%;transition:width 0.1s linear;"></div>
+      </div>
+      <div id="autoSubmitCountdown" style="margin-top:8px;font-size:12px;color:var(--grey-mid);">Submitting in 5 seconds…</div>
+    </div>
   </div>
 </div>
 
@@ -256,6 +261,7 @@ let assessmentMinutes = 60;
 let timerInterval     = null;
 let timerExpired      = false;
 let totalTimerSeconds = 0;
+let assessmentEndTime = 0;   // Wall-clock Date.now() when time runs out
 const CIRC = 2 * Math.PI * 50;  // circumference for r=50
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
@@ -265,9 +271,31 @@ const CIRC = 2 * Math.PI * 50;  // circumference for r=50
     assessmentMinutes = cfg.assessment_minutes || 60;
   } catch (_) {}
   totalTimerSeconds = assessmentMinutes * 60;
-  startTimer(totalTimerSeconds);
+
+  // ── Wall-clock deadline: persisted in sessionStorage so reload can't
+  //    reset the timer. First-load stamps "now + 60min"; any subsequent
+  //    load reuses the original deadline. Per-session key so different
+  //    session_ids don't interfere if the user starts multiple tests.
+  const deadlineKey = 'rdc_deadline_' + sessionId;
+  let stored = parseInt(sessionStorage.getItem(deadlineKey) || '0', 10);
+  if (!stored || isNaN(stored)) {
+    stored = Date.now() + totalTimerSeconds * 1000;
+    sessionStorage.setItem(deadlineKey, String(stored));
+  }
+  assessmentEndTime = stored;
+
   buildPalette();
   renderQuestion(0);
+
+  // Check deadline IMMEDIATELY — if candidate reloaded after expiry,
+  // hard-lock and auto-submit without letting them touch the UI.
+  const remNow = Math.ceil((assessmentEndTime - Date.now()) / 1000);
+  if (remNow <= 0) {
+    timerExpired = true;
+    onTimerExpired();
+  } else {
+    startTimer();
+  }
 })();
 
 // ─── Circular Timer ───────────────────────────────────────────────────────────
@@ -284,42 +312,114 @@ function updateCircleTimer(remaining, total) {
   wrap.classList.toggle('crit', remaining <= 60);
 }
 
-function startTimer(total) {
-  let rem = total;
-  updateCircleTimer(rem, total);
-  timerInterval = setInterval(() => {
+function startTimer() {
+  // Wall-clock based — immune to setInterval throttling in background tabs
+  // and immune to page reloads (deadline persists in sessionStorage).
+  const total = totalTimerSeconds;
+  const tick = () => {
+    const rem = Math.max(0, Math.ceil((assessmentEndTime - Date.now()) / 1000));
     if (rem <= 0) {
       clearInterval(timerInterval);
       timerExpired = true;
       updateCircleTimer(0, total);
+      document.getElementById('timerText').textContent = '00:00';
       onTimerExpired();
       return;
     }
-    rem--;
     const m = Math.floor(rem / 60), s = rem % 60;
     document.getElementById('timerText').textContent = `${pad(m)}:${pad(s)}`;
     const wrap = document.getElementById('timerDisplay');
     wrap.classList.toggle('warn', rem <= 300 && rem > 60);
     wrap.classList.toggle('crit', rem <= 60);
     updateCircleTimer(rem, total);
-  }, 1000);
+  };
+  tick();                                    // immediate first paint
+  timerInterval = setInterval(tick, 1000);
 }
+
+// Also re-check deadline when the tab regains focus — closes the
+// "hide the tab for 90 min then come back and keep answering" loophole.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !timerExpired && assessmentEndTime) {
+    const rem = Math.ceil((assessmentEndTime - Date.now()) / 1000);
+    if (rem <= 0) {
+      timerExpired = true;
+      if (timerInterval) clearInterval(timerInterval);
+      onTimerExpired();
+    }
+  }
+});
 
 function pad(n) { return String(n).padStart(2, '0'); }
 
+// ─── Hard-lock the UI so nothing can be edited after time expiry ─────────────
+function lockAssessmentUI() {
+  // Disable text entry
+  const rt = document.getElementById('responseText');
+  if (rt) { rt.readOnly = true; rt.disabled = true; }
+
+  // Disable every button inside the main content area (nav, voice, clear, submit)
+  document.querySelectorAll('button').forEach(btn => {
+    // Leave the timeout modal's own elements usable if we add any later
+    if (btn.closest('#timeoutModal')) return;
+    btn.disabled = true;
+    btn.style.pointerEvents = 'none';
+    btn.style.opacity = '0.5';
+  });
+
+  // Disable q-dot palette navigation
+  document.querySelectorAll('.q-dot').forEach(dot => {
+    dot.onclick = null;
+    dot.style.pointerEvents = 'none';
+    dot.style.opacity = '0.6';
+  });
+
+  // Kill voice recognition if running
+  try { destroyVoice(); } catch (_) {}
+}
+
 function onTimerExpired() {
-  saveCurrentAnswer();
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+
+  // 1. Capture whatever's in the current textarea as the current question's answer
+  try { saveCurrentAnswer(); } catch (_) {}
+
+  // 2. Hard-lock the UI — no more typing, navigating, or voice
+  lockAssessmentUI();
+
+  // 3. Show the non-dismissable "Time Over" modal
   const answered   = questions.filter(q => answers[q.srt_id]?.trim()).length;
   const unanswered = questions.length - answered;
   document.getElementById('timeoutMsg').innerHTML =
-    `Your assessment time has expired.<br/>` +
-    `<strong>${answered}</strong> question(s) answered · ` +
-    `<strong>${unanswered}</strong> unanswered (scored as zero).`;
+    `Your 60-minute assessment window has ended.<br/>` +
+    `<strong>${answered}</strong> of ${questions.length} answered · ` +
+    `<strong>${unanswered}</strong> unanswered (scored as zero).<br/>` +
+    `Your responses are being submitted automatically…`;
   document.getElementById('timeoutModal').classList.add('show');
-}
-function forceSubmit() {
-  document.getElementById('timeoutModal').classList.remove('show');
-  submitAssessment();
+
+  // 4. Visible countdown → auto-submit (no user click needed)
+  const countdownSecs = 5;
+  const bar       = document.getElementById('autoSubmitBar');
+  const cdText    = document.getElementById('autoSubmitCountdown');
+  const startMs   = Date.now();
+  const endMs     = startMs + countdownSecs * 1000;
+  const cdTick = setInterval(() => {
+    const elapsed = Date.now() - startMs;
+    const pctDone = Math.min(100, (elapsed / (countdownSecs * 1000)) * 100);
+    bar.style.width = pctDone + '%';
+    const remSec = Math.max(0, Math.ceil((endMs - Date.now()) / 1000));
+    cdText.textContent = remSec > 0
+      ? `Submitting in ${remSec} second${remSec === 1 ? '' : 's'}…`
+      : 'Submitting now…';
+    if (Date.now() >= endMs) {
+      clearInterval(cdTick);
+      // Fire submission exactly once
+      if (!window._rdcSubmittedOnTimeout) {
+        window._rdcSubmittedOnTimeout = true;
+        submitAssessment();
+      }
+    }
+  }, 100);
 }
 
 // ─── Q-dot Palette ────────────────────────────────────────────────────────────
@@ -594,6 +694,22 @@ async function submitAssessment() {
 
   } catch (err) {
     overlay.classList.remove('show');
+    // If triggered by timer expiry, the UI is locked and the candidate can't
+    // click a retry button — auto-retry up to 3 times before giving up.
+    if (timerExpired) {
+      const attempts = (window._rdcTimeoutRetries = (window._rdcTimeoutRetries || 0) + 1);
+      if (attempts <= 3) {
+        document.getElementById('autoSubmitCountdown').textContent =
+          `Network issue — retrying submission (attempt ${attempts + 1} of 4)…`;
+        setTimeout(() => submitAssessment(), 5000);
+        return;
+      }
+      // Final fallback — show the error but keep the modal visible
+      document.getElementById('timeoutMsg').innerHTML =
+        `<strong style="color:#CC0000;">Submission failed after multiple retries.</strong><br/>` +
+        `Please refresh this page to try again. Your answers are saved locally.`;
+      return;
+    }
     alert('Submission error: ' + err.message + '\n\nPlease try submitting again.');
   }
 }

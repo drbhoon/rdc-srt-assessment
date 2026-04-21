@@ -218,6 +218,7 @@ def list_sessions() -> List[dict]:
                 "candidate_name":     c.get("candidate_name", ""),
                 "plant_location":     c.get("plant_location", ""),
                 "assessment_date":    c.get("assessment_date", ""),
+                "created_at":         s.get("created_at"),
                 "status":             s.get("status", "in_progress"),
                 "total_score":        report.get("overall_score_out_of_300"),
                 "normalized":         report.get("normalized_score_out_of_100"),
@@ -226,7 +227,7 @@ def list_sessions() -> List[dict]:
                 "has_pdf":            "pdf_bytes" in s,
                 "error":              s.get("error"),
             })
-        result.sort(key=lambda x: x["assessment_date"] or "", reverse=True)
+        result.sort(key=lambda x: x["created_at"] or x["assessment_date"] or "", reverse=True)
         return result
 
     conn = _get_conn()
@@ -234,8 +235,8 @@ def list_sessions() -> List[dict]:
         with conn.cursor() as cur:
             cur.execute(
                 """SELECT session_id, candidate_name, plant_location, assessment_date,
-                          status, scores, report, pdf_data IS NOT NULL, error
-                   FROM sessions ORDER BY assessment_date DESC"""
+                          status, scores, report, pdf_data IS NOT NULL, error, created_at
+                   FROM sessions ORDER BY created_at DESC NULLS LAST, assessment_date DESC"""
             )
             result = []
             for row in cur.fetchall():
@@ -253,6 +254,7 @@ def list_sessions() -> List[dict]:
                     "questions_answered": len(scores),
                     "has_pdf":            row[7],
                     "error":              row[8],
+                    "created_at":         row[9].isoformat() if row[9] else None,
                 })
             return result
     finally:

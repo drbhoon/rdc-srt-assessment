@@ -278,6 +278,7 @@
           <th>Candidate Name</th>
           <th>Plant Location</th>
           <th>Date</th>
+          <th>Created</th>
           <th>Status</th>
           <th>Score /300</th>
           <th>Normalised %</th>
@@ -528,6 +529,7 @@ function renderTable() {
         <td><strong>${escHtml(s.candidate_name)}</strong></td>
         <td>${escHtml(s.plant_location)}</td>
         <td>${escHtml(s.assessment_date)}</td>
+        <td title="${escHtml(absTime(s.created_at))}" style="font-size:12px;color:var(--grey-mid);">${escHtml(relTime(s.created_at))}</td>
         <td><span class="${isDone ? 'badge-completed' : 'badge-progress'}">${isDone ? '✅ Completed' : '⏳ In Progress'}</span></td>
         <td style="font-weight:700;color:var(--blue);">${scoreStr}</td>
         <td>${normStr}</td>
@@ -559,6 +561,28 @@ function readinessClass(text) {
 
 function escHtml(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Relative time formatter — e.g. "2 min ago", "3 hrs ago", "2 days ago"
+function relTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  const secs = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (secs < 60)       return `${secs}s ago`;
+  if (secs < 3600)     return `${Math.floor(secs/60)} min ago`;
+  if (secs < 86400)    return `${Math.floor(secs/3600)} hr ago`;
+  if (secs < 86400*30) return `${Math.floor(secs/86400)} day${secs>=86400*2?'s':''} ago`;
+  return d.toISOString().slice(0, 10);
+}
+
+function absTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  // Local time, e.g. "2026-04-21 14:30"
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 // ─── View Report Modal ────────────────────────────────────────────────────────
