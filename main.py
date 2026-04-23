@@ -47,27 +47,40 @@ client       = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", "
 # In-memory cache for active sessions (synced to DB on key events)
 _cache: Dict[str, Any] = {}
 
-# Caps concurrent rescores so rapid-fire clicks don't stampede the Anthropic
-# rate limit. Live candidate submissions go through a separate path and are
-# NOT gated by this semaphore — they always proceed immediately.
-_RESCORE_MAX_CONCURRENT = 2
-_rescore_semaphore: asyncio.Semaphore | None = None
+# Global pipeline concurrency cap. Scoring 30 questions per assessment =
+# 30 Anthropic API calls. With N candidates submitting in parallel, we end
+# up with ~N concurrent calls slamming the rate limit. Cap=2 keeps us under
+# Haiku tier-1's 50 RPM (2 pipelines × ~30 calls per 90s ≈ 40 RPM).
+# Applies to BOTH live candidate submissions and admin rescore requests.
+_PIPELINE_MAX_CONCURRENT = 2
+_pipeline_semaphore: asyncio.Semaphore | None = None
 
 
-def _get_rescore_semaphore() -> asyncio.Semaphore:
+def _get_pipeline_semaphore() -> asyncio.Semaphore:
     """Lazily instantiate the semaphore on first use so it binds to the live event loop."""
-    global _rescore_semaphore
-    if _rescore_semaphore is None:
-        _rescore_semaphore = asyncio.Semaphore(_RESCORE_MAX_CONCURRENT)
-    return _rescore_semaphore
+    global _pipeline_semaphore
+    if _pipeline_semaphore is None:
+        _pipeline_semaphore = asyncio.Semaphore(_PIPELINE_MAX_CONCURRENT)
+    return _pipeline_semaphore
 
 
-async def _rescore_guarded(session_id: str) -> None:
-    """Queue-friendly rescore wrapper: at most _RESCORE_MAX_CONCURRENT run at once."""
-    sem = _get_rescore_semaphore()
+async def _pipeline_guarded(session_id: str, source: str = "submit") -> None:
+    """Run the scoring + report pipeline with global concurrency cap.
+    Used for live submissions AND admin rescores — a single queue prevents
+    a rush of live candidates from starving the Anthropic rate limit.
+    """
+    sem = _get_pipeline_semaphore()
     async with sem:
-        logger.info("Rescore semaphore acquired for %s (cap=%d)", session_id, _RESCORE_MAX_CONCURRENT)
+        logger.info(
+            "Pipeline semaphore acquired for %s (source=%s, cap=%d)",
+            session_id, source, _PIPELINE_MAX_CONCURRENT,
+        )
         await process_assessment_async(session_id)
+
+
+# Back-compat alias — existing call sites still reference _rescore_guarded.
+async def _rescore_guarded(session_id: str) -> None:
+    await _pipeline_guarded(session_id, source="rescore")
 
 
 @app.on_event("startup")
@@ -252,12 +265,82 @@ async def rescore_session(
         progress=0,
     )
 
-    background_tasks.add_task(_rescore_guarded, session_id)
+    background_tasks.add_task(_pipeline_guarded, session_id, "rescore")
     logger.info(
-        "Admin rescore scheduled for session %s (%d answers, queued behind semaphore cap=%d)",
-        session_id, len(collected), _RESCORE_MAX_CONCURRENT,
+        "Admin rescore scheduled for session %s (%d answers, queued behind pipeline semaphore cap=%d)",
+        session_id, len(collected), _PIPELINE_MAX_CONCURRENT,
     )
     return {"status": "rescoring", "session_id": session_id, "answers": len(collected)}
+
+
+# ─── API: Admin — Bulk rescore all stuck sessions (30/30 but not completed) ──
+@app.post("/api/admin/rescore-stuck")
+async def rescore_stuck_sessions(
+    background_tasks: BackgroundTasks,
+    x_admin_token: str = Header(None),
+):
+    """Rescue path for a batch that got stuck in 'In Progress' state despite
+    having all 30 answers in the database. Schedules a rescore for each
+    eligible session — the pipeline semaphore serializes them cleanly.
+    """
+    if x_admin_token != ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    summary = list_sessions()
+    scheduled: list[str] = []
+    skipped:   list[dict] = []
+
+    for s in summary:
+        sid         = s["session_id"]
+        is_done     = s.get("status") == "completed"
+        answered    = s.get("questions_answered", 0)
+        eligible    = (not is_done) and (answered >= 30)
+        if not eligible:
+            continue
+
+        full = _get(sid)
+        if not full:
+            skipped.append({"session_id": sid, "reason": "not found"})
+            continue
+        collected = full.get("collected_answers") or {}
+        if not collected:
+            skipped.append({"session_id": sid, "reason": "no stored answers"})
+            continue
+
+        # Wipe derived artifacts, preserve questions + collected_answers
+        full["scores"]    = {}
+        full["report"]    = None
+        full["pdf_bytes"] = None
+        full["pdf_error"] = None
+        full["error"]     = None
+        full["status"]    = "processing"
+        full["progress"]  = 0
+        _cache[sid]       = full
+
+        update_session(
+            sid,
+            scores={},
+            report=None,
+            pdf_bytes=None,
+            pdf_error=None,
+            error=None,
+            status="processing",
+            progress=0,
+        )
+        background_tasks.add_task(_pipeline_guarded, sid, "rescore-stuck")
+        scheduled.append(sid)
+
+    logger.info(
+        "Admin bulk-rescore of stuck sessions: %d scheduled, %d skipped "
+        "(semaphore cap=%d)",
+        len(scheduled), len(skipped), _PIPELINE_MAX_CONCURRENT,
+    )
+    return {
+        "scheduled":    len(scheduled),
+        "session_ids":  scheduled,
+        "skipped":      skipped,
+        "concurrency":  _PIPELINE_MAX_CONCURRENT,
+    }
 
 
 
@@ -560,8 +643,14 @@ async def submit_all(req: SubmitAllRequest, background_tasks: BackgroundTasks):
     session["progress"]          = 0
     update_session(req.session_id, collected_answers=req.answers, status="processing", progress=0)
 
-    background_tasks.add_task(process_assessment_async, req.session_id)
-    logger.info("Submitted session %s with %d answers", req.session_id, len(req.answers))
+    # Route through the shared pipeline semaphore so 11 candidates hitting
+    # Submit simultaneously don't stampede the Anthropic rate limit and
+    # kill each other's jobs. Excess submissions queue politely.
+    background_tasks.add_task(_pipeline_guarded, req.session_id, "submit")
+    logger.info(
+        "Submitted session %s with %d answers (queued behind pipeline semaphore cap=%d)",
+        req.session_id, len(req.answers), _PIPELINE_MAX_CONCURRENT,
+    )
     return {"status": "processing", "total": len(session["questions"])}
 
 

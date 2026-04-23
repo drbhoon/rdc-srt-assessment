@@ -101,6 +101,11 @@
     .btn-rescore { background: #17a2b8; color: #fff; border: none; padding: 5px 12px;
       border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; margin-left: 6px; }
     .btn-rescore:hover { background: #117a8b; }
+    .btn-rescore-bulk { background: #e67e22; color: #fff; border: none;
+      padding: 8px 14px; border-radius: 7px; cursor: pointer;
+      font-size: 13px; font-weight: 700; }
+    .btn-rescore-bulk:hover { background: #b35f10; }
+    .btn-rescore-bulk:disabled { background: #ccc; cursor: not-allowed; }
 
     /* Access code modal */
     .ac-modal-bg {
@@ -268,6 +273,7 @@
     <button class="btn-refresh" onclick="loadSessions()">↻ Refresh</button>
     <button class="btn btn-outline btn-sm" onclick="openAccessCodeModal()" title="Generate a 10-digit access code HR can share with up to 10 candidates">+ New Assessment</button>
     <button class="btn btn-primary btn-sm" onclick="openQuickTest()" title="Run a full pipeline test without answering 30 questions">🧪 Quick Test</button>
+    <button class="btn-rescore-bulk" onclick="rescoreAllStuck()" title="Rescue every session that has all 30 answers but is stuck 'In Progress'. Uses stored transcripts — no candidate involvement. Processes 2 at a time.">🚑 Rescore All Stuck</button>
   </div>
 
   <div class="table-wrap">
@@ -712,6 +718,49 @@ async function rescoreSession(sid, name) {
     alert(`✅ Rescore started for "${name}".\nThe report will refresh in 2–3 minutes. Click Refresh to see updated scores.`);
     await loadSessions();
   } catch (e) { alert('Rescore failed: ' + e.message); }
+}
+
+// ─── Bulk Rescore ALL stuck sessions (batch rate-limit rescue) ────────────────
+// Use case: a batch of candidates submitted at the same moment, saturated the
+// Anthropic rate limit, and got stuck "In Progress" at 30/30. All transcripts
+// are safe in the DB — this button reschedules every such session through the
+// pipeline semaphore (2 at a time) to recover scores + reports + PDFs.
+async function rescoreAllStuck() {
+  const stuck = allSessions.filter(
+    s => s.status !== 'completed' && (s.questions_answered || 0) >= 30
+  );
+  if (!stuck.length) {
+    alert('No stuck sessions found.\n\nOnly sessions with 30/30 answers that are still "In Progress" qualify for bulk rescue.');
+    return;
+  }
+  const preview = stuck.slice(0, 10).map(s => `• ${s.candidate_name}`).join('\n')
+    + (stuck.length > 10 ? `\n…and ${stuck.length - 10} more` : '');
+  if (!confirm(
+    `🚑 Rescore ${stuck.length} stuck session(s)?\n\n` +
+    `${preview}\n\n` +
+    `All will use transcripts already saved in the database. ` +
+    `They process 2 at a time (concurrency cap prevents rate-limit errors), ` +
+    `so a batch of 10 typically finishes in ~8–10 minutes.\n\n` +
+    `Click Refresh periodically to track progress.`
+  )) return;
+
+  try {
+    const res = await fetch('/api/admin/rescore-stuck', {
+      method:  'POST',
+      headers: { 'X-Admin-Token': adminToken },
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
+    const d = await res.json();
+    let msg = `✅ ${d.scheduled} session(s) scheduled for rescue (concurrency: ${d.concurrency}).`;
+    if (d.skipped && d.skipped.length) {
+      msg += `\n\nSkipped ${d.skipped.length} (already completed or insufficient answers).`;
+    }
+    msg += `\n\nClick Refresh in ~10 minutes to see updated scores.`;
+    alert(msg);
+    await loadSessions();
+  } catch (e) {
+    alert('Bulk rescore failed: ' + e.message);
+  }
 }
 
 // ─── Force-Reset stuck session ────────────────────────────────────────────────

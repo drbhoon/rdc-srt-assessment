@@ -715,7 +715,12 @@ async function submitAssessment() {
 }
 
 async function pollUntilDone(total, progressText, scoringBar) {
-  const MAX_POLLS = 120;   // 120 × 3s = 6 minutes max wait
+  // 400 × 3s = 20 min max wait. When the server is scoring a batch of
+  // candidates (2 at a time through the pipeline semaphore), later
+  // candidates in the queue may wait 5–10 min before their scoring
+  // even starts. Keeping the client alive through that is critical.
+  const MAX_POLLS = 400;
+  let zeroProgressTicks = 0;
   for (let attempt = 0; attempt < MAX_POLLS; attempt++) {
     await sleep(3000);
     try {
@@ -734,11 +739,29 @@ async function pollUntilDone(total, progressText, scoringBar) {
         throw new Error(error || 'Processing failed on server');
       }
 
+      // Detect "queued, not yet started" — backend acknowledged submit
+      // but scorer hasn't incremented progress yet (waiting for semaphore).
+      const safeTotal = total || 30;
+      const prog      = progress || 0;
+
+      if (prog === 0) {
+        zeroProgressTicks++;
+        // After ~15 seconds with zero progress, explain the wait.
+        if (zeroProgressTicks >= 5) {
+          scoringBar.style.width   = '3%';
+          progressText.textContent =
+            'Your submission is in the queue. Other assessments are being scored first — your results will begin shortly. Please keep this tab open.';
+          continue;
+        }
+      } else {
+        zeroProgressTicks = 0;
+      }
+
       // Update progress bar
-      const pct = Math.min(95, 5 + ((progress / (total || 30)) * 85));
+      const pct = Math.min(95, 5 + ((prog / safeTotal) * 85));
       scoringBar.style.width = pct + '%';
-      if (progress < (total || 30)) {
-        progressText.textContent = `Scoring response ${progress} of ${total || 30}…`;
+      if (prog < safeTotal) {
+        progressText.textContent = `Scoring response ${prog} of ${safeTotal}…`;
       } else {
         progressText.textContent = 'Generating final report…';
       }
@@ -749,7 +772,7 @@ async function pollUntilDone(total, progressText, scoringBar) {
       console.warn('Poll error (will retry):', err.message);
     }
   }
-  throw new Error('Assessment processing timed out. Please contact HR.');
+  throw new Error('Assessment processing timed out. Please contact HR — your answers are saved and can be rescored.');
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
