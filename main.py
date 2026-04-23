@@ -396,7 +396,9 @@ async def diagnose_session(session_id: str, x_admin_token: str = Header(None)):
         "pdf_bytes_len":       len(pdf_bytes) if pdf_bytes else 0,
         "pipeline_concurrency": _PIPELINE_MAX_CONCURRENT,
         "scorer_model":        __import__("scorer").SCORER_MODEL,
+        "scorer_max_tokens":   __import__("scorer").SCORER_MAX_TOKENS,
         "report_model":        __import__("report_generator").REPORT_MODEL,
+        "report_max_tokens":   __import__("report_generator").REPORT_MAX_TOKENS,
     }
 
 

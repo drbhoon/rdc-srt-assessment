@@ -14,6 +14,15 @@ logger = logging.getLogger(__name__)
 # gives better holistic synthesis if you want to trade cost for quality.
 REPORT_MODEL = os.getenv("ANTHROPIC_REPORT_MODEL", "claude-haiku-4-5")
 
+# ── Max output tokens ────────────────────────────────────────────────────────
+# The report JSON is LARGE — it contains 10 competency narratives (~80 words
+# each), strengths, dev areas, coaching plan for 30/60/90 days, and more. At
+# 4096 output tokens, Haiku-4.5 consistently truncates mid-JSON on verbose
+# candidates → `stop_reason=max_tokens` → our retry wrapper tries 3× but all
+# 3 hit the same ceiling → session fails. Haiku-4.5 supports up to 64K
+# output; 16K is plenty of headroom and still well within billing sanity.
+REPORT_MAX_TOKENS = int(os.getenv("ANTHROPIC_REPORT_MAX_TOKENS", "16000"))
+
 # ── Retry configuration (mirrors scorer.py) ──────────────────────────────────
 # Without retries, ANY transient API hiccup (brief 5xx, 429, network blip)
 # during the single report-gen call kills the whole session with status=failed.
@@ -43,7 +52,7 @@ def _report_once(
     """Single report-gen attempt. Raises on failure so caller can retry."""
     message = client.messages.create(
         model=REPORT_MODEL,
-        max_tokens=4096,
+        max_tokens=REPORT_MAX_TOKENS,
         system=system_prompt,
         messages=[
             {

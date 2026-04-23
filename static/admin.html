@@ -4,8 +4,8 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Admin Panel – RDC SRT Assessment</title>
-  <!-- v4.9 — bumped query param to bust CDN / browser cache -->
-  <link rel="stylesheet" href="/static/style.css?v=4.9"/>
+  <!-- v4.10 — bumped query param to bust CDN / browser cache -->
+  <link rel="stylesheet" href="/static/style.css?v=4.10"/>
   <style>
     body { background: #f0f3f8; }
 
@@ -268,7 +268,7 @@
     <div>
       <h1>
         RDC – Plant Incharge Situation Based Competency Assessment Engine
-        <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.9</span>
+        <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.10</span>
       </h1>
       <div class="sub">Admin Panel | Confidential – Head Office Use Only</div>
     </div>
@@ -784,8 +784,8 @@ async function diagnoseSession(sid, name) {
     diagnosis += `PDF Error:        ${d.pdf_error || 'none'}\n`;
     diagnosis += `Session Error:    ${d.error || 'none'}\n`;
     diagnosis += `Pipeline cap:     ${d.pipeline_concurrency} concurrent\n`;
-    diagnosis += `Scorer model:     ${d.scorer_model || '?'}\n`;
-    diagnosis += `Report model:     ${d.report_model || '?'}\n`;
+    diagnosis += `Scorer model:     ${d.scorer_model || '?'} (max ${d.scorer_max_tokens || '?'} tok)\n`;
+    diagnosis += `Report model:     ${d.report_model || '?'} (max ${d.report_max_tokens || '?'} tok)\n`;
     diagnosis += `${'─'.repeat(50)}\n`;
 
     // Interpretation
