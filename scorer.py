@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import time
 import logging
@@ -11,6 +12,12 @@ logger = logging.getLogger(__name__)
 MAX_ATTEMPTS       = 3
 BACKOFF_SECONDS    = (1, 2, 4)   # sleep before attempts 2, 3 (index 0 unused)
 SCORER_MAX_TOKENS  = 2048        # was 1024 — bumped to prevent JSON truncation
+
+# ── Model selection ──────────────────────────────────────────────────────────
+# Old default `claude-3-haiku-20240307` was deprecated by Anthropic and now
+# returns 404 not_found_error (confirmed in prod April 2026). Override via env
+# var ANTHROPIC_SCORER_MODEL if Anthropic retires the current default too.
+SCORER_MODEL = os.getenv("ANTHROPIC_SCORER_MODEL", "claude-haiku-4-5")
 
 
 def get_system_prompt() -> str:
@@ -53,7 +60,7 @@ def _score_once(
 ) -> dict:
     """Single scoring attempt. Raises on failure so caller can retry."""
     message = client.messages.create(
-        model="claude-3-haiku-20240307",
+        model=SCORER_MODEL,
         max_tokens=SCORER_MAX_TOKENS,
         system=system_prompt,
         messages=[

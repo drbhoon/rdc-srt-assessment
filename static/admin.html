@@ -781,6 +781,8 @@ async function diagnoseSession(sid, name) {
     diagnosis += `PDF Error:        ${d.pdf_error || 'none'}\n`;
     diagnosis += `Session Error:    ${d.error || 'none'}\n`;
     diagnosis += `Pipeline cap:     ${d.pipeline_concurrency} concurrent\n`;
+    diagnosis += `Scorer model:     ${d.scorer_model || '?'}\n`;
+    diagnosis += `Report model:     ${d.report_model || '?'}\n`;
     diagnosis += `${'─'.repeat(50)}\n`;
 
     // Interpretation

@@ -1,7 +1,14 @@
 import json
+import os
 import re
 from pathlib import Path
 import anthropic
+
+# Old default `claude-3-haiku-20240307` was deprecated by Anthropic and now
+# returns 404 not_found_error. Override via env var ANTHROPIC_REPORT_MODEL.
+# Report gen analyzes 30 transcripts in one call — Haiku works but Sonnet
+# gives better holistic synthesis if you want to trade cost for quality.
+REPORT_MODEL = os.getenv("ANTHROPIC_REPORT_MODEL", "claude-haiku-4-5")
 
 
 def get_system_prompt() -> str:
@@ -28,7 +35,7 @@ def generate_final_report(
     }
 
     message = client.messages.create(
-        model="claude-3-haiku-20240307",
+        model=REPORT_MODEL,
         max_tokens=4096,
         system=system_prompt,
         messages=[
