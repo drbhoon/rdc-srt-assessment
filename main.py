@@ -406,10 +406,15 @@ async def diagnose_session(session_id: str, x_admin_token: str = Header(None)):
 @app.post("/api/admin/force-reset-processing/{session_id}")
 async def force_reset_processing(session_id: str, x_admin_token: str = Header(None)):
     """Clear the 'processing' lock on a stuck session WITHOUT wiping transcripts.
-    Use this if a session is stuck in 'processing' status (container was killed,
-    task never finished) and you want to flip it to 'failed' so the Rescore
-    button can then re-run the pipeline cleanly. Preserves collected_answers
-    so the rescore path still works.
+    Use this ONLY if a session is stuck in 'processing' status (container was
+    killed, task never finished) and you want to flip it to 'failed' so the
+    Rescore button can then re-run the pipeline cleanly. Preserves
+    collected_answers so the rescore path still works.
+
+    v4.12: Non-destructive for existing errors. If the session is already
+    status='failed' with a real pipeline error message, we preserve that
+    error — earlier versions bulldozed real failure reasons on every admin
+    click, destroying diagnostic information the next time Diagnose was run.
     """
     if x_admin_token != ADMIN_PASSWORD:
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -417,14 +422,24 @@ async def force_reset_processing(session_id: str, x_admin_token: str = Header(No
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    current_status = session.get("status")
+
+    # No-op + reject if the session isn't actually stuck. Prevents admins from
+    # accidentally stomping on a real error by clicking this after a failure.
+    if current_status != "processing":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Session status is '{current_status}', not 'processing' — "
+                f"Force Reset does nothing here. Click Rescore directly instead."
+            ),
+        )
+
+    stock_msg = "Stuck in processing — manually reset by admin. Click Rescore to retry."
     session["status"] = "failed"
-    session["error"]  = "Stuck in processing — manually reset by admin. Click Rescore to retry."
+    session["error"]  = stock_msg
     _cache[session_id] = session
-    update_session(
-        session_id,
-        status="failed",
-        error="Stuck in processing — manually reset by admin. Click Rescore to retry.",
-    )
+    update_session(session_id, status="failed", error=stock_msg)
     logger.info("Admin cleared stuck 'processing' lock on session %s", session_id)
     return {"status": "failed", "session_id": session_id}
 
