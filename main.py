@@ -293,12 +293,14 @@ async def rescore_stuck_sessions(
     for s in summary:
         sid          = s["session_id"]
         is_done      = s.get("status") == "completed"
-        # Use collected_count (raw transcripts) — not questions_answered (scored count).
-        # A prior rescore attempt may have wiped scores to {} without the pipeline
-        # completing, so questions_answered can be 0 even though all 30 transcripts
-        # are safe in the DB. Transcripts are the ground truth for rescore eligibility.
-        has_all_answers = (s.get("collected_count", 0) >= 30)
-        eligible     = (not is_done) and has_all_answers
+        # Any non-completed session with AT LEAST ONE stored transcript is
+        # eligible. Partial submits (e.g. 21/30) are still rescorable — the
+        # scorer handles empty answers by returning 0 immediately without an
+        # API call. Without this, a candidate who submitted partially (like
+        # Sateshwar) would be permanently stuck because the UI had no way to
+        # kick off their rescore.
+        has_any_answers = (s.get("collected_count", 0) > 0)
+        eligible     = (not is_done) and has_any_answers
         if not eligible:
             continue
 

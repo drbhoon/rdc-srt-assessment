@@ -1,8 +1,12 @@
 import json
+import logging
 import os
 import re
+import time
 from pathlib import Path
 import anthropic
+
+logger = logging.getLogger(__name__)
 
 # Old default `claude-3-haiku-20240307` was deprecated by Anthropic and now
 # returns 404 not_found_error. Override via env var ANTHROPIC_REPORT_MODEL.
@@ -10,30 +14,33 @@ import anthropic
 # gives better holistic synthesis if you want to trade cost for quality.
 REPORT_MODEL = os.getenv("ANTHROPIC_REPORT_MODEL", "claude-haiku-4-5")
 
+# ── Retry configuration (mirrors scorer.py) ──────────────────────────────────
+# Without retries, ANY transient API hiccup (brief 5xx, 429, network blip)
+# during the single report-gen call kills the whole session with status=failed.
+# Observed in prod v4.8: Vivek's rescore succeeded (136/300), Ashwani/Saksham
+# rescores failed on identical inputs — classic unretried-transient-error
+# pattern.
+REPORT_MAX_ATTEMPTS    = 3
+REPORT_BACKOFF_SECONDS = (2, 5)  # sleep before attempts 2, 3 — report gen is
+                                  # more expensive than scoring so use longer
+                                  # backoffs to let throttles clear.
+
+
+class ReportTruncatedError(Exception):
+    """Raised when Claude hit max_tokens ceiling and output is incomplete JSON."""
+
 
 def get_system_prompt() -> str:
     skill_path = Path(__file__).parent / "skill" / "RDC-Plant-Incharge-SRT-Assessment.md"
     return skill_path.read_text(encoding="utf-8")
 
 
-def generate_final_report(
+def _report_once(
     client: anthropic.Anthropic,
-    candidate_name: str,
-    plant_location: str,
-    assessment_date: str,
-    results: list,
+    system_prompt: str,
+    input_data: dict,
 ) -> dict:
-    """Call Claude API in MODE 2 (final_report) and return parsed JSON report."""
-    system_prompt = get_system_prompt()
-
-    input_data = {
-        "mode": "final_report",
-        "candidate_name": candidate_name,
-        "plant_location": plant_location,
-        "assessment_date": assessment_date,
-        "results": results,
-    }
-
+    """Single report-gen attempt. Raises on failure so caller can retry."""
     message = client.messages.create(
         model=REPORT_MODEL,
         max_tokens=4096,
@@ -63,6 +70,11 @@ def generate_final_report(
         ],
     )
 
+    # Detect truncation early so we retry rather than attempt to parse garbage
+    if getattr(message, "stop_reason", None) == "max_tokens":
+        logger.warning("Report generator truncated at max_tokens — will retry")
+        raise ReportTruncatedError("Report response truncated at max_tokens")
+
     # Model continues after our prefilled '{', so prepend it back
     response_text = "{" + message.content[0].text.strip()
 
@@ -70,16 +82,68 @@ def generate_final_report(
     response_text = re.sub(r"```.*$", "", response_text, flags=re.DOTALL).strip()
 
     try:
-        result = json.loads(response_text)
+        return json.loads(response_text)
     except json.JSONDecodeError:
-        # Fallback: try to extract the outermost JSON object
+        # Fallback: try to extract the outermost JSON object.
+        # Re-raise if even that fails so the retry wrapper can try again.
         obj_match = re.search(r"\{.*\}", response_text, re.DOTALL)
         if obj_match:
-            try:
-                result = json.loads(obj_match.group())
-            except json.JSONDecodeError:
-                result = {"raw_response": response_text, "error": "JSON parse failed"}
-        else:
-            result = {"raw_response": response_text, "error": "JSON parse failed"}
+            return json.loads(obj_match.group())   # may raise — intended
+        raise
 
-    return result
+
+def generate_final_report(
+    client: anthropic.Anthropic,
+    candidate_name: str,
+    plant_location: str,
+    assessment_date: str,
+    results: list,
+) -> dict:
+    """Call Claude API in MODE 2 (final_report) and return parsed JSON report.
+    Retries up to REPORT_MAX_ATTEMPTS on transient API errors / truncation /
+    JSON parse failures. Propagates the final error to the caller (the
+    background pipeline sets session.error = str(exc) if this escapes).
+    """
+    system_prompt = get_system_prompt()
+    input_data = {
+        "mode": "final_report",
+        "candidate_name": candidate_name,
+        "plant_location": plant_location,
+        "assessment_date": assessment_date,
+        "results": results,
+    }
+
+    last_exc: Exception | None = None
+    for attempt in range(1, REPORT_MAX_ATTEMPTS + 1):
+        try:
+            return _report_once(client, system_prompt, input_data)
+        except (
+            anthropic.APIError,
+            anthropic.APIStatusError,
+            anthropic.APIConnectionError,
+            anthropic.RateLimitError,
+            ReportTruncatedError,
+            json.JSONDecodeError,
+        ) as exc:
+            last_exc = exc
+            if attempt < REPORT_MAX_ATTEMPTS:
+                delay = (
+                    REPORT_BACKOFF_SECONDS[attempt - 1]
+                    if attempt - 1 < len(REPORT_BACKOFF_SECONDS) else 5
+                )
+                logger.warning(
+                    "Report-gen attempt %d/%d failed (%s: %s) — retrying in %ds",
+                    attempt, REPORT_MAX_ATTEMPTS,
+                    type(exc).__name__, str(exc)[:160], delay,
+                )
+                time.sleep(delay)
+            else:
+                logger.error(
+                    "Report-gen attempt %d/%d FINAL failure (%s: %s)",
+                    attempt, REPORT_MAX_ATTEMPTS,
+                    type(exc).__name__, str(exc)[:160],
+                )
+
+    # All retries exhausted — re-raise so process_assessment_async captures it
+    # in session.error. Admin can then see the precise reason via Diagnose.
+    raise last_exc if last_exc else RuntimeError("Report generation failed (no exception captured)")
