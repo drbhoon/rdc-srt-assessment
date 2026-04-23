@@ -4,7 +4,8 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Admin Panel – RDC SRT Assessment</title>
-  <link rel="stylesheet" href="/static/style.css"/>
+  <!-- v4.7 — bumped query param to bust CDN / browser cache -->
+  <link rel="stylesheet" href="/static/style.css?v=4.7"/>
   <style>
     body { background: #f0f3f8; }
 
@@ -78,6 +79,16 @@
     /* Status badges */
     .badge-completed  { background:#d4edda; color:#155724; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:700; }
     .badge-progress   { background:#fff3cd; color:#856404; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:700; }
+    .badge-processing { background:#cfe2ff; color:#084298; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:700; }
+    .badge-failed     { background:#f8d7da; color:#721c24; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:700; }
+    .badge-stuck      { background:#fbd5b5; color:#7a3e00; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:700; }
+    .version-badge    { background: rgba(255,255,255,.18); color:#fff; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:700; letter-spacing:.5px; margin-left:8px; }
+    .btn-diagnose { background: #6f42c1; color: #fff; border: none; padding: 5px 10px;
+      border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; margin-left: 6px; }
+    .btn-diagnose:hover { background: #5832a0; }
+    .btn-clearlock { background: #fd7e14; color: #fff; border: none; padding: 5px 10px;
+      border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; margin-left: 6px; }
+    .btn-clearlock:hover { background: #c8600c; }
 
     /* Readiness colors */
     .ready-high { color: #1a7a1a; font-weight: 700; }
@@ -255,7 +266,10 @@
 
   <div class="dash-header">
     <div>
-      <h1>RDC – Plant Incharge Situation Based Competency Assessment Engine</h1>
+      <h1>
+        RDC – Plant Incharge Situation Based Competency Assessment Engine
+        <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.7</span>
+      </h1>
       <div class="sub">Admin Panel | Confidential – Head Office Use Only</div>
     </div>
     <button class="dash-logout" onclick="logout()">Logout</button>
@@ -517,17 +531,42 @@ function renderTable() {
   document.getElementById('emptyState').style.display = 'none';
 
   filtered.forEach((s, i) => {
-    const isDone      = s.status === 'completed';
-    const hasFullAnsw = (s.questions_answered || 0) >= 30;
-    // Rescore is safe whenever scoring is complete (30/30) — covers both
-    // normal completed sessions AND sessions killed mid-pipeline by a deploy.
+    const rawStatus   = s.status || 'in_progress';
+    const isDone      = rawStatus === 'completed';
+    const isFailed    = rawStatus === 'failed';
+    const isProcessing = rawStatus === 'processing';
+    // Stable answer count from DB — NOT scores (which gets wiped on rescore).
+    const transcripts = s.collected_count || 0;
+    const hasFullAnsw = transcripts >= 30;
+    // Rescore is safe whenever the candidate actually submitted all 30 answers,
+    // regardless of current status. Looks at transcripts, not scores.
     const canRescore  = hasFullAnsw;
     // Reset wipes transcripts — only offer it when the candidate hasn't
     // finished answering (genuinely stuck early), never on a 30/30 session.
     const canReset    = !isDone && !hasFullAnsw;
+    // Clear-lock flips a 'processing' lock to 'failed' so Rescore can re-enter.
+    // Only meaningful when status is truly stuck on 'processing'.
+    const canClearLock = isProcessing && hasFullAnsw;
     const readyCls    = readinessClass(s.readiness);
     const scoreStr    = typeof s.total_score === 'number' ? s.total_score : '—';
     const normStr     = typeof s.normalized === 'number' ? s.normalized.toFixed(1) + '%' : '—';
+
+    // Precise status badge — distinguish in_progress (candidate didn't finish)
+    // from processing (pipeline running) from failed (errored) from stuck.
+    let badgeHtml;
+    if (isDone) {
+      badgeHtml = `<span class="badge-completed">✅ Completed</span>`;
+    } else if (isFailed) {
+      const errTip = s.error ? escHtml(s.error) : 'Pipeline failed — click Rescore to retry';
+      badgeHtml = `<span class="badge-failed" title="${errTip}">❌ Failed</span>`;
+    } else if (isProcessing && hasFullAnsw) {
+      badgeHtml = `<span class="badge-stuck" title="All 30 answers submitted but status is still 'processing'. Likely the backend container was killed before the pipeline finished (common during a Railway redeploy). Click 🔍 Diagnose to see details, or 🔁 Rescore to re-run.">⏱ Stuck (processing)</span>`;
+    } else if (isProcessing) {
+      badgeHtml = `<span class="badge-processing" title="Pipeline is running now — AI scoring in flight">🔄 Processing</span>`;
+    } else {
+      // in_progress — candidate started but hasn't submitted
+      badgeHtml = `<span class="badge-progress" title="Candidate has not yet submitted all 30 answers">⏳ In Progress</span>`;
+    }
 
     body.innerHTML += `
       <tr>
@@ -536,17 +575,19 @@ function renderTable() {
         <td>${escHtml(s.plant_location)}</td>
         <td>${escHtml(s.assessment_date)}</td>
         <td title="${escHtml(absTime(s.created_at))}" style="font-size:12px;color:var(--grey-mid);">${escHtml(relTime(s.created_at))}</td>
-        <td><span class="${isDone ? 'badge-completed' : 'badge-progress'}">${isDone ? '✅ Completed' : '⏳ In Progress'}</span></td>
+        <td>${badgeHtml}</td>
         <td style="font-weight:700;color:var(--blue);">${scoreStr}</td>
         <td>${normStr}</td>
         <td class="${readyCls}">${escHtml(s.readiness || '—')}</td>
-        <td>${s.questions_answered} / 30</td>
+        <td title="Scored: ${s.questions_answered}/30 · Transcripts in DB: ${transcripts}/30">${s.questions_answered} / 30${transcripts > s.questions_answered ? ` <span style="color:#1a7a1a;font-size:10px;">(${transcripts} saved)</span>` : ''}</td>
         <td>
           ${isDone ? `<button class="btn-view" onclick="viewReport('${s.session_id}')">👁 View</button>` : ''}
           <button class="btn-pdf ${s.has_pdf ? '' : 'disabled'}"
             onclick="${s.has_pdf ? `downloadPdfFor('${s.session_id}')` : ''}"
             title="${s.has_pdf ? 'Download PDF' : 'PDF not available'}">⬇️ PDF</button>
           ${canRescore ? `<button class="btn-rescore" onclick="rescoreSession('${s.session_id}','${escHtml(s.candidate_name)}')" title="${isDone ? 'Re-score this session from stored transcripts (no candidate involvement needed)' : 'Session got stuck mid-pipeline (likely killed by a deploy). All 30 answers are safe — click to resume cleanly from stored transcripts.'}">🔁 Rescore</button>` : ''}
+          ${canClearLock ? `<button class="btn-clearlock" onclick="clearLock('${s.session_id}','${escHtml(s.candidate_name)}')" title="Clear the 'processing' lock so you can Rescore. Use when a deploy killed the pipeline mid-run and the session is now hung.">🔓 Clear Lock</button>` : ''}
+          <button class="btn-diagnose" onclick="diagnoseSession('${s.session_id}','${escHtml(s.candidate_name)}')" title="Show detailed backend state for this session (status, progress, errors, transcript count, scoring errors)">🔍 Diagnose</button>
           ${canReset ? `<button class="btn-reset" onclick="resetSession('${s.session_id}','${escHtml(s.candidate_name)}')" title="Reset stuck session — WIPES stored answers, candidate must re-take the test. Use only when 30/30 answers are NOT yet submitted.">↺ Reset</button>` : ''}
         </td>
         <td>
@@ -718,6 +759,67 @@ async function rescoreSession(sid, name) {
     alert(`✅ Rescore started for "${name}".\nThe report will refresh in 2–3 minutes. Click Refresh to see updated scores.`);
     await loadSessions();
   } catch (e) { alert('Rescore failed: ' + e.message); }
+}
+
+// ─── Diagnose a stuck session (show exact backend state) ─────────────────────
+async function diagnoseSession(sid, name) {
+  try {
+    const res = await fetch(`/api/admin/diagnose/${sid}`, {
+      headers: { 'X-Admin-Token': adminToken },
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
+    const d = await res.json();
+
+    let diagnosis = `DIAGNOSIS — ${name}\n`;
+    diagnosis += `${'─'.repeat(50)}\n`;
+    diagnosis += `Status:           ${d.status}\n`;
+    diagnosis += `Progress:         ${d.progress} / 30\n`;
+    diagnosis += `Transcripts:      ${d.collected_count} saved (${d.answered_nonempty} non-empty)\n`;
+    diagnosis += `Scored:           ${d.scored_count} / 30 (${d.scored_zeros} zero, ${d.scoring_error_count} API errors)\n`;
+    diagnosis += `Has Report:       ${d.has_report ? 'YES' : 'NO'}\n`;
+    diagnosis += `Has PDF:          ${d.has_pdf ? `YES (${d.pdf_bytes_len} bytes)` : 'NO'}\n`;
+    diagnosis += `PDF Error:        ${d.pdf_error || 'none'}\n`;
+    diagnosis += `Session Error:    ${d.error || 'none'}\n`;
+    diagnosis += `Pipeline cap:     ${d.pipeline_concurrency} concurrent\n`;
+    diagnosis += `${'─'.repeat(50)}\n`;
+
+    // Interpretation
+    if (d.status === 'completed') {
+      diagnosis += `\n✅ VERDICT: Session completed successfully.`;
+    } else if (d.status === 'failed') {
+      diagnosis += `\n❌ VERDICT: Pipeline failed. Click Rescore to retry from saved transcripts.`;
+    } else if (d.status === 'processing' && d.collected_count >= 30) {
+      diagnosis += `\n⏱ VERDICT: Stuck 'processing' with all 30 answers saved.\n` +
+                   `   Most likely: backend was killed (deploy / OOM) before pipeline\n` +
+                   `   could set status=completed. Click 🔓 Clear Lock, then 🔁 Rescore.`;
+    } else if (d.status === 'processing') {
+      diagnosis += `\n🔄 VERDICT: Pipeline running right now (${d.progress}/30 scored).`;
+    } else {
+      diagnosis += `\n⏳ VERDICT: Candidate hasn't submitted all 30 answers yet.`;
+    }
+
+    if (d.scoring_errors && d.scoring_errors.length) {
+      diagnosis += `\n\nFirst scoring errors:\n`;
+      d.scoring_errors.forEach(e => {
+        diagnosis += `  ${e.srt_id}: ${(e.improvements||[]).join(' | ')}\n`;
+      });
+    }
+    alert(diagnosis);
+  } catch (e) { alert('Diagnose failed: ' + e.message); }
+}
+
+// ─── Clear 'processing' lock on a stuck session ──────────────────────────────
+async function clearLock(sid, name) {
+  if (!confirm(`Clear the 'processing' lock on "${name}"?\n\nThis flips the status from 'processing' to 'failed' so the Rescore button can re-run the pipeline. Transcripts in the database are NOT touched.\n\nUse this when a session is stuck in 'processing' forever (backend was killed mid-pipeline).`)) return;
+  try {
+    const res = await fetch(`/api/admin/force-reset-processing/${sid}`, {
+      method:  'POST',
+      headers: { 'X-Admin-Token': adminToken },
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
+    alert(`✅ Lock cleared for "${name}".\n\nNow click 🔁 Rescore to re-run the pipeline from saved transcripts.`);
+    await loadSessions();
+  } catch (e) { alert('Clear-lock failed: ' + e.message); }
 }
 
 // ─── Bulk Rescore ALL stuck sessions (batch rate-limit rescue) ────────────────

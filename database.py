@@ -211,8 +211,9 @@ def list_sessions() -> List[dict]:
     if not DATABASE_URL:
         result = []
         for sid, s in _memory_store.items():
-            c      = s.get("candidate", {})
-            report = s.get("report") or {}
+            c        = s.get("candidate", {})
+            report   = s.get("report") or {}
+            collected = s.get("collected_answers") or {}
             result.append({
                 "session_id":         sid,
                 "candidate_name":     c.get("candidate_name", ""),
@@ -224,6 +225,10 @@ def list_sessions() -> List[dict]:
                 "normalized":         report.get("normalized_score_out_of_100"),
                 "readiness":          report.get("overall_readiness", "—"),
                 "questions_answered": len(s.get("scores", {})),
+                # Separate from questions_answered — transcripts are preserved
+                # even after a rescore wipes scores to {}, so this is the stable
+                # indicator that a candidate actually completed their 30 answers.
+                "collected_count":    sum(1 for v in collected.values() if (v or "").strip()),
                 "has_pdf":            "pdf_bytes" in s,
                 "error":              s.get("error"),
             })
@@ -235,13 +240,15 @@ def list_sessions() -> List[dict]:
         with conn.cursor() as cur:
             cur.execute(
                 """SELECT session_id, candidate_name, plant_location, assessment_date,
-                          status, scores, report, pdf_data IS NOT NULL, error, created_at
+                          status, scores, report, pdf_data IS NOT NULL, error, created_at,
+                          collected_answers
                    FROM sessions ORDER BY created_at DESC NULLS LAST, assessment_date DESC"""
             )
             result = []
             for row in cur.fetchall():
-                scores = row[5] if isinstance(row[5], dict) else json.loads(row[5] or "{}")
-                report = row[6] if isinstance(row[6], dict) else json.loads(row[6] or "{}")
+                scores    = row[5]  if isinstance(row[5],  dict) else json.loads(row[5]  or "{}")
+                report    = row[6]  if isinstance(row[6],  dict) else json.loads(row[6]  or "{}")
+                collected = row[10] if isinstance(row[10], dict) else json.loads(row[10] or "{}")
                 result.append({
                     "session_id":         row[0],
                     "candidate_name":     row[1],
@@ -252,6 +259,7 @@ def list_sessions() -> List[dict]:
                     "normalized":         (report or {}).get("normalized_score_out_of_100"),
                     "readiness":          (report or {}).get("overall_readiness", "—"),
                     "questions_answered": len(scores),
+                    "collected_count":    sum(1 for v in collected.values() if (v or "").strip()),
                     "has_pdf":            row[7],
                     "error":              row[8],
                     "created_at":         row[9].isoformat() if row[9] else None,

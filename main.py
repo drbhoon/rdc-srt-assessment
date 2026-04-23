@@ -291,10 +291,14 @@ async def rescore_stuck_sessions(
     skipped:   list[dict] = []
 
     for s in summary:
-        sid         = s["session_id"]
-        is_done     = s.get("status") == "completed"
-        answered    = s.get("questions_answered", 0)
-        eligible    = (not is_done) and (answered >= 30)
+        sid          = s["session_id"]
+        is_done      = s.get("status") == "completed"
+        # Use collected_count (raw transcripts) — not questions_answered (scored count).
+        # A prior rescore attempt may have wiped scores to {} without the pipeline
+        # completing, so questions_answered can be 0 even though all 30 transcripts
+        # are safe in the DB. Transcripts are the ground truth for rescore eligibility.
+        has_all_answers = (s.get("collected_count", 0) >= 30)
+        eligible     = (not is_done) and has_all_answers
         if not eligible:
             continue
 
@@ -343,6 +347,80 @@ async def rescore_stuck_sessions(
     }
 
 
+
+
+# ─── API: Admin — Diagnose a session (why is it stuck?) ──────────────────────
+@app.get("/api/admin/diagnose/{session_id}")
+async def diagnose_session(session_id: str, x_admin_token: str = Header(None)):
+    """Return granular session state so admin can see WHY a session isn't
+    flipping to 'completed'. Use this when a session is stuck 'In Progress'
+    and you want to know: is it genuinely processing? Did scoring complete?
+    Did report gen fail? Is the error field populated?
+    """
+    if x_admin_token != ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    session = _get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    collected = session.get("collected_answers") or {}
+    scores    = session.get("scores") or {}
+    report    = session.get("report")
+    pdf_bytes = session.get("pdf_bytes")
+
+    answered_nonempty = sum(1 for v in collected.values() if (v or "").strip())
+    scored_zero       = sum(1 for v in scores.values() if (v or {}).get("score", 0) == 0)
+    scoring_errors    = [
+        {"srt_id": k, "improvements": (v or {}).get("improvements", [])}
+        for k, v in scores.items()
+        if any("Scoring error" in str(x) for x in (v or {}).get("improvements", []))
+    ]
+
+    return {
+        "session_id":          session_id,
+        "candidate_name":      (session.get("candidate") or {}).get("candidate_name"),
+        "status":              session.get("status"),
+        "progress":            session.get("progress"),
+        "error":               session.get("error"),
+        "pdf_error":           session.get("pdf_error"),
+        "collected_count":     len(collected),
+        "answered_nonempty":   answered_nonempty,
+        "scored_count":        len(scores),
+        "scored_zeros":        scored_zero,
+        "scoring_error_count": len(scoring_errors),
+        "scoring_errors":      scoring_errors[:5],   # first 5 for brevity
+        "has_report":          bool(report),
+        "has_pdf":             bool(pdf_bytes),
+        "pdf_bytes_len":       len(pdf_bytes) if pdf_bytes else 0,
+        "pipeline_concurrency": _PIPELINE_MAX_CONCURRENT,
+    }
+
+
+# ─── API: Admin — Force Reset a stuck 'processing' session ───────────────────
+@app.post("/api/admin/force-reset-processing/{session_id}")
+async def force_reset_processing(session_id: str, x_admin_token: str = Header(None)):
+    """Clear the 'processing' lock on a stuck session WITHOUT wiping transcripts.
+    Use this if a session is stuck in 'processing' status (container was killed,
+    task never finished) and you want to flip it to 'failed' so the Rescore
+    button can then re-run the pipeline cleanly. Preserves collected_answers
+    so the rescore path still works.
+    """
+    if x_admin_token != ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    session = _get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    session["status"] = "failed"
+    session["error"]  = "Stuck in processing — manually reset by admin. Click Rescore to retry."
+    _cache[session_id] = session
+    update_session(
+        session_id,
+        status="failed",
+        error="Stuck in processing — manually reset by admin. Click Rescore to retry.",
+    )
+    logger.info("Admin cleared stuck 'processing' lock on session %s", session_id)
+    return {"status": "failed", "session_id": session_id}
 
 
 # ─── API: Admin — Generate Access Code ───────────────────────────────────────
