@@ -4,8 +4,8 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Admin Panel – RDC SRT Assessment</title>
-  <!-- v4.16 — skill prompt v2.3: worked examples + secondary floor=3 + expanded RMC list (Sonnet 4.5 calibration) -->
-  <link rel="stylesheet" href="/static/style.css?v=4.16"/>
+  <!-- v4.17 — Force Full Rescore button + 75-min default assessment time -->
+  <link rel="stylesheet" href="/static/style.css?v=4.17"/>
   <style>
     body { background: #f0f3f8; }
 
@@ -268,7 +268,7 @@
     <div>
       <h1>
         RDC – Plant Incharge Situation Based Competency Assessment Engine
-        <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.16</span>
+        <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.17</span>
       </h1>
       <div class="sub">Admin Panel | Confidential – Head Office Use Only</div>
     </div>
@@ -588,7 +588,8 @@ function renderTable() {
           <button class="btn-pdf ${s.has_pdf ? '' : 'disabled'}"
             onclick="${s.has_pdf ? `downloadPdfFor('${s.session_id}')` : ''}"
             title="${s.has_pdf ? 'Download PDF' : 'PDF not available'}">⬇️ PDF</button>
-          ${canRescore ? `<button class="btn-rescore" onclick="rescoreSession('${s.session_id}','${escHtml(s.candidate_name)}')" title="${isDone ? 'Re-score this session from stored transcripts (no candidate involvement needed)' : (hasFullAnsw ? 'Session got stuck mid-pipeline. All 30 answers are safe — click to resume cleanly from stored transcripts.' : `Partial submit: ${transcripts}/30 answers stored. Rescore will use what's there; unanswered questions score 0.`)}">🔁 Rescore</button>` : ''}
+          ${canRescore ? `<button class="btn-rescore" onclick="rescoreSession('${s.session_id}','${escHtml(s.candidate_name)}')" title="${isDone ? 'Smart resume — re-runs only errored/missing questions (preserves valid prior scores)' : (hasFullAnsw ? 'Session got stuck mid-pipeline. All 30 answers are safe — click to resume cleanly from stored transcripts.' : `Partial submit: ${transcripts}/30 answers stored. Rescore will use what's there; unanswered questions score 0.`)}">🔁 Rescore</button>` : ''}
+          ${canRescore && isDone ? `<button class="btn-rescore" style="background:#8e44ad;" onclick="forceFullRescoreSession('${s.session_id}','${escHtml(s.candidate_name)}')" title="Force full rescore — WIPES all 30 prior scores and re-runs every question under the latest skill prompt. Use after a calibration change.">⟳⟳ Full</button>` : ''}
           ${canClearLock ? `<button class="btn-clearlock" onclick="clearLock('${s.session_id}','${escHtml(s.candidate_name)}')" title="Clear the 'processing' lock so you can Rescore. Use when a deploy killed the pipeline mid-run and the session is now hung.">🔓 Clear Lock</button>` : ''}
           <button class="btn-diagnose" onclick="diagnoseSession('${s.session_id}','${escHtml(s.candidate_name)}')" title="Show detailed backend state for this session (status, progress, errors, transcript count, scoring errors)">🔍 Diagnose</button>
           ${canReset ? `<button class="btn-reset" onclick="resetSession('${s.session_id}','${escHtml(s.candidate_name)}')" title="Reset stuck session — WIPES stored answers, candidate must re-take the test. Use only when 30/30 answers are NOT yet submitted.">↺ Reset</button>` : ''}
@@ -751,17 +752,64 @@ document.getElementById('qtModal').addEventListener('click', function(e) {
 });
 
 // ─── Rescore a single completed session ──────────────────────────────────────
+// Two modes:
+//   • Smart resume (default): preserves valid prior scores, re-runs only
+//     errored or missing questions. Fast, low rate-limit pressure.
+//   • Force full: wipes all 30 prior scores and re-runs every question
+//     under the currently deployed skill prompt. Use after a prompt
+//     calibration change so the new logic applies to ALL 30 questions,
+//     not just the ones that previously errored.
 async function rescoreSession(sid, name) {
-  if (!confirm(`Rescore assessment for "${name}"?\n\nThis will re-run scoring, report generation, and PDF creation using the candidate's previously submitted answers. No candidate involvement required. Takes 2–3 minutes.`)) return;
+  const choice = confirm(
+    `Rescore "${name}"?\n\n` +
+    `▶ OK = SMART RESUME\n` +
+    `   Keeps valid prior scores. Only re-runs errored or missing\n` +
+    `   questions. Fast, recommended for stuck-pipeline recovery.\n\n` +
+    `▶ Cancel, then click "Force Full Rescore" instead\n` +
+    `   if you want all 30 questions re-scored under the latest\n` +
+    `   skill prompt (e.g., after a calibration change).\n\n` +
+    `Click OK for smart resume, Cancel to abort.`
+  );
+  if (!choice) return;
   try {
     const res = await fetch(`/api/admin/rescore/${sid}`, {
       method:  'POST',
       headers: { 'X-Admin-Token': adminToken },
     });
     if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
-    alert(`✅ Rescore started for "${name}".\nThe report will refresh in 2–3 minutes. Click Refresh to see updated scores.`);
+    const d = await res.json();
+    const detail = d.questions_to_run !== undefined
+      ? `\nMode: ${d.mode || 'smart-resume'} — ${d.questions_to_run} of 30 questions will be (re-)scored.`
+      : '';
+    alert(`✅ Rescore started for "${name}".${detail}\nThe report will refresh in 2–3 minutes. Click Refresh to see updated scores.`);
     await loadSessions();
   } catch (e) { alert('Rescore failed: ' + e.message); }
+}
+
+// ─── Force-full rescore (wipes prior scores) ─────────────────────────────────
+// Used after a skill prompt calibration change so the new prompt applies
+// to ALL 30 questions, not just the ones that previously errored.
+async function forceFullRescoreSession(sid, name) {
+  const ok = confirm(
+    `FORCE FULL RESCORE for "${name}"?\n\n` +
+    `⚠ This WIPES all 30 prior scores and re-runs every question\n` +
+    `from scratch under the currently deployed skill prompt.\n\n` +
+    `Use when the skill prompt has changed (e.g., new calibration)\n` +
+    `and you want the change applied to every question.\n\n` +
+    `Slower than smart resume (~5 min) and burns more API quota.\n\n` +
+    `Continue?`
+  );
+  if (!ok) return;
+  try {
+    const res = await fetch(`/api/admin/rescore/${sid}?force_full=true`, {
+      method:  'POST',
+      headers: { 'X-Admin-Token': adminToken },
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
+    const d = await res.json();
+    alert(`✅ Force-full rescore started for "${name}".\nMode: ${d.mode} — all 30 questions queued.\nReport will refresh in ~5 min.`);
+    await loadSessions();
+  } catch (e) { alert('Force-full rescore failed: ' + e.message); }
 }
 
 // ─── Diagnose a stuck session (show exact backend state) ─────────────────────

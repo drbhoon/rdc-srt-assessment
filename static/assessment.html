@@ -223,7 +223,7 @@
     <div class="timeout-icon">⏰</div>
     <div class="timeout-title" style="color:#CC0000;">Time Over — Please Submit Now</div>
     <div class="timeout-msg" id="timeoutMsg">
-      Your 60-minute assessment window has ended.<br/>
+      Your assessment window has ended.<br/>
       Your responses are being submitted automatically…
     </div>
     <div style="margin-top:14px;">
@@ -268,7 +268,7 @@ const CIRC = 2 * Math.PI * 50;  // circumference for r=50
 (async () => {
   try {
     const cfg = await fetch('/api/config').then(r => r.json());
-    assessmentMinutes = cfg.assessment_minutes || 60;
+    assessmentMinutes = cfg.assessment_minutes || 75;
   } catch (_) {}
   totalTimerSeconds = assessmentMinutes * 60;
 
@@ -391,7 +391,7 @@ function onTimerExpired() {
   const answered   = questions.filter(q => answers[q.srt_id]?.trim()).length;
   const unanswered = questions.length - answered;
   document.getElementById('timeoutMsg').innerHTML =
-    `Your 60-minute assessment window has ended.<br/>` +
+    `Your ${assessmentMinutes}-minute assessment window has ended.<br/>` +
     `<strong>${answered}</strong> of ${questions.length} answered · ` +
     `<strong>${unanswered}</strong> unanswered (scored as zero).<br/>` +
     `Your responses are being submitted automatically…`;

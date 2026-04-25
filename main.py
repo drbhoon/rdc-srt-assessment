@@ -38,7 +38,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 # ─── Config ──────────────────────────────────────────────────────────────────
 ADMIN_PASSWORD     = os.environ.get("ADMIN_PASSWORD", "rdc@admin2024")
 EXCEL_PATH         = os.environ.get("EXCEL_PATH", str(Path(__file__).parent / "data" / "RDC_SRT_Master_100.xlsx"))
-ASSESSMENT_MINUTES = int(os.environ.get("ASSESSMENT_MINUTES", "60"))
+ASSESSMENT_MINUTES = int(os.environ.get("ASSESSMENT_MINUTES", "75"))
 
 # ─── Globals ─────────────────────────────────────────────────────────────────
 questions_db = load_questions(EXCEL_PATH)
@@ -225,10 +225,18 @@ async def force_reset_endpoint(session_id: str, x_admin_token: str = Header(None
 async def rescore_session(
     session_id: str,
     background_tasks: BackgroundTasks,
+    force_full: bool = False,
     x_admin_token: str = Header(None),
 ):
     """Re-run scoring + report + PDF against transcripts already in collected_answers.
     No candidate involvement needed — answers are loaded from Postgres.
+
+    Modes:
+      • Default (smart resume): preserves valid prior scores, only re-runs
+        errored or missing questions. Use after deploys / for stuck sessions.
+      • force_full=true: WIPES all prior scores and re-runs all 30 questions.
+        Use when the skill prompt has changed and you want the new
+        calibration applied to every question (not just the failed ones).
     """
     if x_admin_token != ADMIN_PASSWORD:
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -244,18 +252,56 @@ async def rescore_session(
             detail="Session has no stored candidate answers — cannot rescore.",
         )
 
-    # v4.15: SMART RESUME. Don't wipe scores — preserve them so the
-    # pipeline can skip already-scored questions and only retry errors
-    # / missing ones. Saksham 20/30 case → next Rescore only does 10
-    # API calls instead of 30. Wipe only the derived artifacts (report,
-    # pdf) that need regeneration after any score change.
+    if force_full:
+        # ── FULL RESCORE: wipe scores → all 30 questions re-run under
+        # whatever skill prompt is currently deployed. Use for calibration
+        # tests after a prompt change. The pipeline will see an empty
+        # scores dict and score every question fresh.
+        session["scores"]    = {}
+        session["report"]    = None
+        session["pdf_bytes"] = None
+        session["pdf_error"] = None
+        session["error"]     = None
+        session["status"]    = "processing"
+        session["progress"]  = 0
+        _cache[session_id]   = session
+
+        update_session(
+            session_id,
+            scores={},
+            report=None,
+            pdf_bytes=None,
+            pdf_error=None,
+            error=None,
+            status="processing",
+            progress=0,
+        )
+
+        background_tasks.add_task(_pipeline_guarded, session_id, "rescore-full")
+        logger.info(
+            "Admin FORCE-FULL rescore for %s (%d answers, all scores wiped, "
+            "30 fresh API calls queued, semaphore cap=%d)",
+            session_id, len(collected), _PIPELINE_MAX_CONCURRENT,
+        )
+        return {
+            "status":           "rescoring",
+            "mode":             "force-full",
+            "session_id":       session_id,
+            "answers":          len(collected),
+            "resumed_scores":   0,
+            "questions_to_run": 30,
+        }
+
+    # v4.15: SMART RESUME (default). Don't wipe scores — preserve them so
+    # the pipeline can skip already-scored questions and only retry errors
+    # / missing ones. Wipe only the derived artifacts (report, pdf) that
+    # need regeneration after any score change.
     existing_scores = session.get("scores") or {}
     session["report"]    = None
     session["pdf_bytes"] = None
     session["pdf_error"] = None
     session["error"]     = None
     session["status"]    = "processing"
-    # Pre-set progress to count of valid prior scores (resume signal in UI)
     valid_prior = sum(
         1 for v in existing_scores.values()
         if (v or {}).get("score", 0) > 0 or
@@ -282,6 +328,7 @@ async def rescore_session(
     )
     return {
         "status":           "rescoring",
+        "mode":             "smart-resume",
         "session_id":       session_id,
         "answers":          len(collected),
         "resumed_scores":   valid_prior,

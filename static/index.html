@@ -158,7 +158,7 @@
       <li>Read each situation carefully and respond as you would in the actual role.</li>
       <li>You may <strong>type your response</strong> or use the <strong>voice dictation</strong> feature.</li>
       <li>Be specific — mention data, systems, team actions, root causes where relevant.</li>
-      <li>Total time allowed: <strong>60 minutes</strong>. A countdown timer is shown at the top.</li>
+      <li>Total time allowed: <strong id="assessmentTimeLabel">75 minutes</strong>. A countdown timer is shown at the top.</li>
       <li>Do not skip questions. All 30 must be answered for a complete report.</li>
       <li>Your responses are evaluated on: Problem Understanding, Depth, Secondary Awareness, and Structure.</li>
       <li>After submission, HR will review your results and revert back to you with the outcome.</li>
@@ -169,6 +169,16 @@
 <script>
   // Set today's date as default
   document.getElementById('assessmentDate').value = new Date().toISOString().split('T')[0];
+
+  // Pull the configured assessment duration from the backend so the
+  // instructions card reflects the real value (default 75 min, but
+  // overridable via ASSESSMENT_MINUTES env var).
+  fetch('/api/config').then(r => r.ok ? r.json() : null).then(cfg => {
+    if (cfg && cfg.assessment_minutes) {
+      const lbl = document.getElementById('assessmentTimeLabel');
+      if (lbl) lbl.textContent = `${cfg.assessment_minutes} minutes`;
+    }
+  }).catch(() => {});
 
   let validatedCode = '';
 
