@@ -4,8 +4,8 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Admin Panel – RDC SRT Assessment</title>
-  <!-- v4.14 — prompt caching (system prompt) + retry-after header honoring (kills 429 cascades) -->
-  <link rel="stylesheet" href="/static/style.css?v=4.14"/>
+  <!-- v4.15 — smart-resume Rescore (preserves valid scores, only re-runs errors/missing) -->
+  <link rel="stylesheet" href="/static/style.css?v=4.15"/>
   <style>
     body { background: #f0f3f8; }
 
@@ -268,7 +268,7 @@
     <div>
       <h1>
         RDC – Plant Incharge Situation Based Competency Assessment Engine
-        <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.14</span>
+        <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.15</span>
       </h1>
       <div class="sub">Admin Panel | Confidential – Head Office Use Only</div>
     </div>
@@ -773,12 +773,29 @@ async function diagnoseSession(sid, name) {
     if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
     const d = await res.json();
 
+    // v4.15: resume-aware breakdown — defaults handle older API responses
+    const validScored      = (d.valid_scored      ?? null);
+    const legitZeros       = (d.legit_zeros       ?? null);
+    const errorZeros       = (d.error_zeros       ?? null);
+    const missingQuestions = (d.missing_questions ?? null);
+    const nextRescoreRuns  = (d.next_rescore_runs ?? null);
+    const hasResumeData    = (validScored !== null);
+
     let diagnosis = `DIAGNOSIS — ${name}\n`;
     diagnosis += `${'─'.repeat(50)}\n`;
     diagnosis += `Status:           ${d.status}\n`;
     diagnosis += `Progress:         ${d.progress} / 30\n`;
     diagnosis += `Transcripts:      ${d.collected_count} saved (${d.answered_nonempty} non-empty)\n`;
-    diagnosis += `Scored:           ${d.scored_count} / 30 (${d.scored_zeros} zero, ${d.scoring_error_count} API errors)\n`;
+    if (hasResumeData) {
+      diagnosis += `Scored breakdown:\n`;
+      diagnosis += `  ✓ Valid scores:    ${validScored} / 30   (preserved on Rescore)\n`;
+      diagnosis += `  ○ Legit empty:     ${legitZeros} / 30   (unanswered Qs, preserved)\n`;
+      diagnosis += `  ✗ Error zeros:     ${errorZeros} / 30   (will retry on Rescore)\n`;
+      diagnosis += `  − Never attempted: ${missingQuestions} / 30   (will score fresh)\n`;
+      diagnosis += `Next Rescore:     ${nextRescoreRuns} API call(s) — not 30. Smart-resume.\n`;
+    } else {
+      diagnosis += `Scored:           ${d.scored_count} / 30 (${d.scored_zeros} zero, ${d.scoring_error_count} API errors)\n`;
+    }
     diagnosis += `Has Report:       ${d.has_report ? 'YES' : 'NO'}\n`;
     diagnosis += `Has PDF:          ${d.has_pdf ? `YES (${d.pdf_bytes_len} bytes)` : 'NO'}\n`;
     diagnosis += `PDF Error:        ${d.pdf_error || 'none'}\n`;
@@ -792,11 +809,19 @@ async function diagnoseSession(sid, name) {
     if (d.status === 'completed') {
       diagnosis += `\n✅ VERDICT: Session completed successfully.`;
     } else if (d.status === 'failed') {
-      diagnosis += `\n❌ VERDICT: Pipeline failed. Click Rescore to retry from saved transcripts.`;
+      diagnosis += `\n❌ VERDICT: Pipeline failed. Click Rescore to retry`;
+      if (hasResumeData && nextRescoreRuns < 30) {
+        diagnosis += ` — only ${nextRescoreRuns} questions need re-running (smart resume).`;
+      } else {
+        diagnosis += ` from saved transcripts.`;
+      }
     } else if (d.status === 'processing' && d.collected_count >= 30) {
       diagnosis += `\n⏱ VERDICT: Stuck 'processing' with all 30 answers saved.\n` +
                    `   Most likely: backend was killed (deploy / OOM) before pipeline\n` +
                    `   could set status=completed. Click 🔓 Clear Lock, then 🔁 Rescore.`;
+      if (hasResumeData && nextRescoreRuns < 30) {
+        diagnosis += `\n   Smart-resume: only ${nextRescoreRuns} of 30 questions need API calls.`;
+      }
     } else if (d.status === 'processing') {
       diagnosis += `\n🔄 VERDICT: Pipeline running right now (${d.progress}/30 scored).`;
     } else {

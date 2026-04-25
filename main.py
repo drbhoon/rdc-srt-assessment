@@ -244,33 +244,49 @@ async def rescore_session(
             detail="Session has no stored candidate answers — cannot rescore.",
         )
 
-    # Wipe derived artifacts, preserve questions + collected_answers
-    session["scores"]    = {}
+    # v4.15: SMART RESUME. Don't wipe scores — preserve them so the
+    # pipeline can skip already-scored questions and only retry errors
+    # / missing ones. Saksham 20/30 case → next Rescore only does 10
+    # API calls instead of 30. Wipe only the derived artifacts (report,
+    # pdf) that need regeneration after any score change.
+    existing_scores = session.get("scores") or {}
     session["report"]    = None
     session["pdf_bytes"] = None
     session["pdf_error"] = None
     session["error"]     = None
     session["status"]    = "processing"
-    session["progress"]  = 0
+    # Pre-set progress to count of valid prior scores (resume signal in UI)
+    valid_prior = sum(
+        1 for v in existing_scores.values()
+        if (v or {}).get("score", 0) > 0 or
+           "Question not answered" in str(((v or {}).get("improvements") or [""])[0])
+    )
+    session["progress"]  = valid_prior
     _cache[session_id]   = session
 
     update_session(
         session_id,
-        scores={},
         report=None,
         pdf_bytes=None,
         pdf_error=None,
         error=None,
         status="processing",
-        progress=0,
+        progress=valid_prior,
     )
 
     background_tasks.add_task(_pipeline_guarded, session_id, "rescore")
     logger.info(
-        "Admin rescore scheduled for session %s (%d answers, queued behind pipeline semaphore cap=%d)",
-        session_id, len(collected), _PIPELINE_MAX_CONCURRENT,
+        "Admin rescore scheduled for session %s (%d answers, %d valid prior scores preserved, "
+        "queued behind pipeline semaphore cap=%d)",
+        session_id, len(collected), valid_prior, _PIPELINE_MAX_CONCURRENT,
     )
-    return {"status": "rescoring", "session_id": session_id, "answers": len(collected)}
+    return {
+        "status":           "rescoring",
+        "session_id":       session_id,
+        "answers":          len(collected),
+        "resumed_scores":   valid_prior,
+        "questions_to_run": 30 - valid_prior,
+    }
 
 
 # ─── API: Admin — Bulk rescore all stuck sessions (30/30 but not completed) ──
@@ -313,28 +329,33 @@ async def rescore_stuck_sessions(
             skipped.append({"session_id": sid, "reason": "no stored answers"})
             continue
 
-        # Wipe derived artifacts, preserve questions + collected_answers
-        full["scores"]    = {}
+        # v4.15: SMART RESUME — preserve prior scores. Pipeline skips
+        # already-validly-scored questions, only retries errors / missing.
+        existing = full.get("scores") or {}
+        valid_prior = sum(
+            1 for v in existing.values()
+            if (v or {}).get("score", 0) > 0 or
+               "Question not answered" in str(((v or {}).get("improvements") or [""])[0])
+        )
         full["report"]    = None
         full["pdf_bytes"] = None
         full["pdf_error"] = None
         full["error"]     = None
         full["status"]    = "processing"
-        full["progress"]  = 0
+        full["progress"]  = valid_prior
         _cache[sid]       = full
 
         update_session(
             sid,
-            scores={},
             report=None,
             pdf_bytes=None,
             pdf_error=None,
             error=None,
             status="processing",
-            progress=0,
+            progress=valid_prior,
         )
         background_tasks.add_task(_pipeline_guarded, sid, "rescore-stuck")
-        scheduled.append(sid)
+        scheduled.append({"session_id": sid, "resumed_scores": valid_prior})
 
     logger.info(
         "Admin bulk-rescore of stuck sessions: %d scheduled, %d skipped "
@@ -371,12 +392,32 @@ async def diagnose_session(session_id: str, x_admin_token: str = Header(None)):
     pdf_bytes = session.get("pdf_bytes")
 
     answered_nonempty = sum(1 for v in collected.values() if (v or "").strip())
-    scored_zero       = sum(1 for v in scores.values() if (v or {}).get("score", 0) == 0)
-    scoring_errors    = [
-        {"srt_id": k, "improvements": (v or {}).get("improvements", [])}
-        for k, v in scores.items()
-        if any("Scoring error" in str(x) for x in (v or {}).get("improvements", []))
-    ]
+
+    # v4.15: Decompose the scores dict into resume-relevant buckets.
+    #   • valid_scored = real scores from a successful API call (score > 0)
+    #   • legit_zeros  = score=0 because transcript was empty (legitimate)
+    #   • error_zeros  = score=0 because the API call failed (will retry on Rescore)
+    # The next Rescore re-runs ONLY error_zeros + missing questions.
+    valid_scored = 0
+    legit_zeros  = 0
+    error_zeros  = 0
+    scoring_errors_list = []
+    for srt_id, v in scores.items():
+        score = (v or {}).get("score", 0)
+        imps  = (v or {}).get("improvements") or []
+        first_imp = str(imps[0]) if imps else ""
+        if score > 0:
+            valid_scored += 1
+        elif "Question not answered" in first_imp:
+            legit_zeros += 1
+        else:
+            # score=0 with non-empty failure reason → error_zero
+            error_zeros += 1
+            if "Scoring error" in first_imp or "BadRequest" in first_imp or "after" in first_imp:
+                scoring_errors_list.append({"srt_id": srt_id, "improvements": imps})
+
+    questions_to_rerun = error_zeros + max(0, len(scores) and (30 - len(scores)))
+    missing_questions  = max(0, 30 - len(scores))
 
     return {
         "session_id":          session_id,
@@ -388,9 +429,19 @@ async def diagnose_session(session_id: str, x_admin_token: str = Header(None)):
         "collected_count":     len(collected),
         "answered_nonempty":   answered_nonempty,
         "scored_count":        len(scores),
-        "scored_zeros":        scored_zero,
-        "scoring_error_count": len(scoring_errors),
-        "scoring_errors":      scoring_errors[:5],   # first 5 for brevity
+
+        # ── New v4.15 resume-aware fields ─────────────────────────────────
+        "valid_scored":         valid_scored,        # real scores, will be preserved
+        "legit_zeros":          legit_zeros,         # empty-transcript zeros, preserved
+        "error_zeros":          error_zeros,         # API-failed zeros, will retry
+        "missing_questions":    missing_questions,   # never attempted, will score
+        "next_rescore_runs":    error_zeros + missing_questions,  # actual API calls on Rescore
+
+        # Legacy alias kept for backward compat with older admin.html
+        "scored_zeros":        legit_zeros + error_zeros,
+        "scoring_error_count": len(scoring_errors_list),
+        "scoring_errors":      scoring_errors_list[:5],
+
         "has_report":          bool(report),
         "has_pdf":             bool(pdf_bytes),
         "pdf_bytes_len":       len(pdf_bytes) if pdf_bytes else 0,
@@ -573,11 +624,45 @@ async def process_assessment_async(session_id: str) -> None:
 
         logger.info("Starting background processing for session %s (%d questions)", session_id, total)
 
-        # ── Step 1: Score every question ─────────────────────────────────────
+        # ── Step 1: Score every question (RESUME-AWARE) ─────────────────────
+        # v4.15: Preserve valid prior scores across rescore attempts. The
+        # decision tree per question:
+        #   • Has prior score > 0          → keep, skip API call (RESUMED)
+        #   • Has prior "Question not answered" zero → keep, skip (LEGIT EMPTY)
+        #   • Has prior "Scoring error..." zero      → re-score (RETRY)
+        #   • No prior entry at all                  → score fresh (NEW)
+        # This makes Rescore safe to retry: a pipeline killed at q20
+        # only re-runs q21-30 instead of starting over. 3× less rate
+        # limit pressure, 3× less wall time, 3× less chance to die again.
         scores = session.get("scores", {})
+        resumed_count = 0
+        retry_count   = 0
+        new_count     = 0
         for i, q in enumerate(questions):
             srt_id     = q["srt_id"]
             transcript = collected_answers.get(srt_id, "").strip()
+
+            # ── Resume guard: skip questions that already have valid results
+            prior = scores.get(srt_id) or {}
+            prior_score = int(prior.get("score", 0)) if prior else 0
+            prior_imp   = (prior.get("improvements") or [""])[0] if prior else ""
+            is_valid_score = (prior_score > 0) or (
+                prior_score == 0 and "Question not answered" in str(prior_imp)
+            )
+            if is_valid_score:
+                resumed_count += 1
+                session["progress"] = i + 1
+                logger.info(
+                    "Resume: skipping %s (prior score=%d) for session %s",
+                    srt_id, prior_score, session_id,
+                )
+                continue
+
+            # ── Need to (re-)score this question
+            if prior:  # had a prior entry but it was an error → retry
+                retry_count += 1
+            else:
+                new_count += 1
 
             try:
                 result = await asyncio.to_thread(
@@ -611,6 +696,11 @@ async def process_assessment_async(session_id: str) -> None:
             if (i + 1) % 5 == 0 or (i + 1) == total:
                 update_session(session_id, scores=scores, progress=i + 1)
             logger.info("Scored %d/%d for session %s", i + 1, total, session_id)
+
+        logger.info(
+            "Scoring loop done for %s: %d resumed, %d retried (was error), %d new",
+            session_id, resumed_count, retry_count, new_count,
+        )
 
         # ── Step 2: Build results array with transcripts for deep analysis ───
         results = []
