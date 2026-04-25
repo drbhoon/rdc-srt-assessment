@@ -49,11 +49,24 @@ def _report_once(
     system_prompt: str,
     input_data: dict,
 ) -> dict:
-    """Single report-gen attempt. Raises on failure so caller can retry."""
+    """Single report-gen attempt. Raises on failure so caller can retry.
+
+    v4.14: System prompt wrapped with cache_control=ephemeral. Cache keys
+    are model-scoped, so this cache is independent from the scorer's cache
+    (different model). The win here is across SUCCESSIVE report-gen calls
+    in a bulk-rescore — once one candidate's report writes the cache, the
+    next candidate's report read at ~10% input cost and reduced TPM weight.
+    """
     message = client.messages.create(
         model=REPORT_MODEL,
         max_tokens=REPORT_MAX_TOKENS,
-        system=system_prompt,
+        system=[
+            {
+                "type": "text",
+                "text": system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
         messages=[
             {
                 "role": "user",
@@ -168,6 +181,22 @@ def generate_final_report(
                     REPORT_BACKOFF_SECONDS[attempt - 1]
                     if attempt - 1 < len(REPORT_BACKOFF_SECONDS) else 5
                 )
+
+                # Honor retry-after header on 429 (see scorer.py for rationale).
+                # Report-gen is a single big call so 429s here are rarer, but
+                # when they hit, Anthropic's hint is always smarter than ours.
+                if isinstance(exc, anthropic.RateLimitError):
+                    try:
+                        retry_after_hdr = exc.response.headers.get("retry-after")
+                        if retry_after_hdr:
+                            ra = int(float(retry_after_hdr))
+                            delay = max(2, min(60, ra))
+                            logger.warning(
+                                "Report-gen 429 — honoring retry-after=%ss", delay,
+                            )
+                    except (AttributeError, ValueError, TypeError):
+                        pass
+
                 logger.warning(
                     "Report-gen attempt %d/%d failed (%s: %s) — retrying in %ds",
                     attempt, REPORT_MAX_ATTEMPTS,

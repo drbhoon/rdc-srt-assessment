@@ -58,11 +58,26 @@ def _score_once(
     system_prompt: str,
     input_data: dict,
 ) -> dict:
-    """Single scoring attempt. Raises on failure so caller can retry."""
+    """Single scoring attempt. Raises on failure so caller can retry.
+
+    v4.14: System prompt is wrapped as a single content block with
+    cache_control=ephemeral. The 9000-char skill prompt is identical for
+    every one of the 30 scoring calls per candidate. After the first call
+    populates the cache, the next 29 read it at ~10% input cost AND a
+    fraction of the TPM weight — which is the difference between staying
+    under Sonnet 4.5 tier-1 limits vs. cascading 429s. Cache TTL is 5min,
+    so a full 30-question batch (~3-5 min) stays warm end-to-end.
+    """
     message = client.messages.create(
         model=SCORER_MODEL,
         max_tokens=SCORER_MAX_TOKENS,
-        system=system_prompt,
+        system=[
+            {
+                "type": "text",
+                "text": system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
         messages=[
             {
                 "role": "user",
@@ -80,6 +95,19 @@ def _score_once(
             },
         ],
     )
+
+    # Surface cache hit/miss to logs for tuning visibility. Anthropic returns
+    # cache_creation_input_tokens (write) and cache_read_input_tokens (hit).
+    usage = getattr(message, "usage", None)
+    if usage is not None:
+        logger.info(
+            "Scorer usage for %s: in=%s out=%s cache_write=%s cache_read=%s",
+            srt_id,
+            getattr(usage, "input_tokens", "?"),
+            getattr(usage, "output_tokens", "?"),
+            getattr(usage, "cache_creation_input_tokens", 0),
+            getattr(usage, "cache_read_input_tokens", 0),
+        )
 
     # Detect truncation early so we retry rather than attempt to parse garbage
     if getattr(message, "stop_reason", None) == "max_tokens":
@@ -170,7 +198,27 @@ def score_question(
         ) as exc:
             last_exc = exc
             if attempt < MAX_ATTEMPTS:
+                # Default fixed backoff (1s, 2s, 4s)
                 delay = BACKOFF_SECONDS[attempt - 1] if attempt - 1 < len(BACKOFF_SECONDS) else 4
+
+                # On 429 RateLimitError, Anthropic returns a `retry-after`
+                # header telling us EXACTLY how long to wait. Honoring that
+                # is much more efficient than guessing — our (1,2,4) sequence
+                # was retrying too soon and re-triggering the same 429.
+                if isinstance(exc, anthropic.RateLimitError):
+                    try:
+                        retry_after_hdr = exc.response.headers.get("retry-after")
+                        if retry_after_hdr:
+                            ra = int(float(retry_after_hdr))
+                            # Clamp 1-30s — protect against pathological values
+                            delay = max(1, min(30, ra))
+                            logger.warning(
+                                "Scoring 429 for %s — honoring retry-after=%ss (was %ss)",
+                                srt_id, delay, BACKOFF_SECONDS[attempt - 1],
+                            )
+                    except (AttributeError, ValueError, TypeError):
+                        pass  # Fall back to fixed backoff
+
                 logger.warning(
                     "Scoring attempt %d/%d failed for %s (%s: %s) — retrying in %ds",
                     attempt, MAX_ATTEMPTS, srt_id, type(exc).__name__, str(exc)[:120], delay,
