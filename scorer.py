@@ -133,11 +133,33 @@ def score_question(
     }
 
     last_exc: Exception | None = None
+    final_attempt = 0
     for attempt in range(1, MAX_ATTEMPTS + 1):
+        final_attempt = attempt
         try:
             return _score_once(client, srt_id, system_prompt, input_data)
 
-        # Retryable classes: API errors (incl. 429/5xx), our truncation marker, JSON parse errors
+        # 400 BadRequestError is DETERMINISTIC — same input → same 400 every time.
+        # Don't waste 2 more retries (= 6 extra wasted seconds + double API cost).
+        # Bail immediately AND log full forensic context (model, transcript head,
+        # exception body) so we can diagnose what content tripped the validator.
+        # MUST come BEFORE the generic APIStatusError catch below — Python picks
+        # the first matching except, so order = priority.
+        except anthropic.BadRequestError as exc:
+            last_exc = exc
+            logger.error(
+                "Scorer 400 BadRequestError for %s — bailing immediately (no retry, deterministic).\n"
+                "  model=%s max_tokens=%d\n"
+                "  transcript_len=%d transcript_head=%r\n"
+                "  full_error=%s",
+                srt_id, SCORER_MODEL, SCORER_MAX_TOKENS,
+                len(candidate_transcript), candidate_transcript[:200],
+                str(exc)[:800],
+                exc_info=True,
+            )
+            break
+
+        # Retryable classes: 429/5xx, connection blips, truncation marker, JSON parse errors
         except (
             anthropic.APIError,
             anthropic.APIStatusError,
@@ -157,7 +179,7 @@ def score_question(
             else:
                 logger.error(
                     "Scoring attempt %d/%d FINAL failure for %s (%s: %s)",
-                    attempt, MAX_ATTEMPTS, srt_id, type(exc).__name__, str(exc)[:120],
+                    attempt, MAX_ATTEMPTS, srt_id, type(exc).__name__, str(exc)[:200],
                 )
 
         except Exception as exc:
@@ -165,11 +187,15 @@ def score_question(
             last_exc = exc
             logger.error(
                 "Non-retryable scoring error for %s (%s: %s)",
-                srt_id, type(exc).__name__, str(exc)[:120], exc_info=True,
+                srt_id, type(exc).__name__, str(exc)[:200], exc_info=True,
             )
             break
 
-    # All attempts exhausted → return zero-payload (preserves old contract for the caller)
+    # All attempts exhausted → return zero-payload (preserves old contract for the caller).
+    # Truncate at 300 (was 80) so the Diagnose panel actually shows the API's
+    # `message` field instead of cutting off mid-dict-repr at the structural keys.
+    err_label = type(last_exc).__name__ if last_exc else "Unknown"
+    err_text  = str(last_exc)[:300] if last_exc else "no exception captured"
     return {
         "srt_id": srt_id,
         "primary_competency": primary_competency,
@@ -179,5 +205,5 @@ def score_question(
         "structure_clarity": 0,
         "total": 0,
         "strengths": [],
-        "improvements": [f"Scoring error after {MAX_ATTEMPTS} attempts: {str(last_exc)[:80]}"],
+        "improvements": [f"Scoring error after {final_attempt} attempt(s) [{err_label}]: {err_text}"],
     }

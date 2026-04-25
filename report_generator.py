@@ -126,6 +126,34 @@ def generate_final_report(
     for attempt in range(1, REPORT_MAX_ATTEMPTS + 1):
         try:
             return _report_once(client, system_prompt, input_data)
+
+        # 400 BadRequestError is deterministic — same payload → same rejection.
+        # Common causes: 30 verbose transcripts pushing past context window,
+        # malformed unicode in a transcript, content-policy hit, prefill
+        # conflict. Retrying wastes 7 seconds (2+5 backoff) and burns billing.
+        # Bail immediately AND log forensic context (candidate name, payload
+        # size, first transcript head) so we can actually diagnose. MUST come
+        # BEFORE the generic APIStatusError catch — order = priority.
+        except anthropic.BadRequestError as exc:
+            last_exc = exc
+            try:
+                payload_chars    = len(json.dumps(input_data, ensure_ascii=False))
+                first_transcript = (input_data.get("results") or [{}])[0].get("transcript", "")
+            except Exception:
+                payload_chars    = -1
+                first_transcript = ""
+            logger.error(
+                "Report-gen 400 BadRequestError — bailing immediately (no retry, deterministic).\n"
+                "  candidate=%s model=%s max_tokens=%d\n"
+                "  payload_chars=%d first_transcript_head=%r\n"
+                "  full_error=%s",
+                input_data.get("candidate_name"), REPORT_MODEL, REPORT_MAX_TOKENS,
+                payload_chars, first_transcript[:200],
+                str(exc)[:1000],
+                exc_info=True,
+            )
+            break
+
         except (
             anthropic.APIError,
             anthropic.APIStatusError,
@@ -150,9 +178,10 @@ def generate_final_report(
                 logger.error(
                     "Report-gen attempt %d/%d FINAL failure (%s: %s)",
                     attempt, REPORT_MAX_ATTEMPTS,
-                    type(exc).__name__, str(exc)[:160],
+                    type(exc).__name__, str(exc)[:300],
                 )
 
-    # All retries exhausted — re-raise so process_assessment_async captures it
-    # in session.error. Admin can then see the precise reason via Diagnose.
+    # All retries exhausted (or 400 fast-fail) — re-raise so
+    # process_assessment_async captures the message in session.error.
+    # Admin can then see the precise reason via Diagnose.
     raise last_exc if last_exc else RuntimeError("Report generation failed (no exception captured)")
