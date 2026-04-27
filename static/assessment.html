@@ -3,8 +3,13 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <!-- v4.18 — no-cache headers prevent candidates from receiving a stale
+       assessment.html with the old hardcoded 60-minute timer fallback. -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+  <meta http-equiv="Pragma" content="no-cache"/>
+  <meta http-equiv="Expires" content="0"/>
   <title>Plant Incharge – SBCA Assessment | RDC</title>
-  <link rel="stylesheet" href="/static/style.css"/>
+  <link rel="stylesheet" href="/static/style.css?v=4.18"/>
   <style>
     /* ── Header timer badge ── */
     .timer-wrap {
@@ -221,7 +226,7 @@
 <div class="timeout-modal" id="timeoutModal">
   <div class="timeout-box">
     <div class="timeout-icon">⏰</div>
-    <div class="timeout-title" style="color:#CC0000;">Time Over — Please Submit Now</div>
+    <div class="timeout-title" style="color:#CC0000;">Time Over — Submitting Your Responses</div>
     <div class="timeout-msg" id="timeoutMsg">
       Your assessment window has ended.<br/>
       Your responses are being submitted automatically…

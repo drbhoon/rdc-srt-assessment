@@ -40,6 +40,20 @@ ADMIN_PASSWORD     = os.environ.get("ADMIN_PASSWORD", "rdc@admin2024")
 EXCEL_PATH         = os.environ.get("EXCEL_PATH", str(Path(__file__).parent / "data" / "RDC_SRT_Master_100.xlsx"))
 ASSESSMENT_MINUTES = int(os.environ.get("ASSESSMENT_MINUTES", "75"))
 
+# v4.18: Boot-time visibility on the configured assessment duration. If
+# Railway has ASSESSMENT_MINUTES=60 set as an env var, code default of 75
+# is overridden silently — this log line surfaces the conflict so we can
+# verify what's actually live without guessing.
+_env_assessment = os.environ.get("ASSESSMENT_MINUTES")
+if _env_assessment is not None:
+    print(
+        f"[STARTUP] ASSESSMENT_MINUTES = {ASSESSMENT_MINUTES} "
+        f"(via Railway env var '{_env_assessment}'). To use code default 75, "
+        f"DELETE the ASSESSMENT_MINUTES env var on Railway."
+    )
+else:
+    print(f"[STARTUP] ASSESSMENT_MINUTES = {ASSESSMENT_MINUTES} (code default — no env var set)")
+
 # ─── Globals ─────────────────────────────────────────────────────────────────
 questions_db = load_questions(EXCEL_PATH)
 client       = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))

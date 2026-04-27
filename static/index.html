@@ -282,7 +282,10 @@
       sessionStorage.setItem('rdc_candidate',  JSON.stringify(candForStore));
       sessionStorage.setItem('rdc_answers',    JSON.stringify({}));
 
-      window.location.href = '/assessment';
+      // v4.18 cache-buster — prevents browser from serving a stale
+      // assessment.html (which would lock the candidate into the old
+      // hardcoded 60-min timer instead of the current 75-min default).
+      window.location.href = '/assessment?v=4.18';
     } catch (err) {
       alert('Error starting session: ' + err.message);
       btn.disabled = false;
