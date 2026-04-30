@@ -19,9 +19,18 @@ RDC_MID_GREY   = HexColor("#666666")
 RDC_LIGHT_GREY = HexColor("#F5F5F5")
 WHITE          = colors.white
 
+# v2.4: 5-tier color map. Includes legacy 3-tier names so old reports
+# rendered with new code still color correctly.
 READINESS_COLORS = {
-    "ready for higher responsibility": HexColor("#1A7A1A"),
-    "ready with structured support":   HexColor("#CC7700"),
+    # New v2.4 5-tier
+    "ready for higher responsibility": HexColor("#0F5A0F"),  # deep green
+    "ready to be plant manager":       HexColor("#1A7A1A"),  # green
+    "ready with structured support":   HexColor("#CC7700"),  # amber
+    "not yet ready":                   HexColor("#CC0000"),  # red
+    "low potential":                   HexColor("#7A0000"),  # dark red
+    # Legacy 3-tier (case-insensitive substring match)
+    "ready for higher":                HexColor("#0F5A0F"),
+    "structured support":              HexColor("#CC7700"),
     "not ready yet":                   HexColor("#CC0000"),
 }
 
@@ -109,8 +118,15 @@ def generate_pdf(report_data: dict, candidate: dict, output_path: str = None) ->
     story.append(_sec("2.  Overall Performance Summary", sec_sty))
     total      = report_data.get("overall_score_out_of_300", 0)
     normalized = report_data.get("normalized_score_out_of_100", 0.0)
+    # v2.4: total may be a float (e.g. 187.5) due to English-proficiency
+    # adjustment. Render with one decimal if non-integer, else as int.
+    try:
+        tnum = float(total)
+        total_str = f"{tnum:.1f}" if abs(tnum - round(tnum)) > 0.05 else str(int(round(tnum)))
+    except (TypeError, ValueError):
+        total_str = str(total)
     perf = Table([
-        [Paragraph(str(total), big_sty), Paragraph(f"{float(normalized):.1f}%", big_sty), Paragraph(_esc(readiness), read_sty)],
+        [Paragraph(total_str, big_sty), Paragraph(f"{float(normalized):.1f}%", big_sty), Paragraph(_esc(readiness), read_sty)],
         [Paragraph("Total Score (out of 300)", slbl_sty), Paragraph("Normalized Score", slbl_sty), Paragraph("Overall Readiness", slbl_sty)],
     ], colWidths=[5.5*cm, 5.5*cm, 6*cm])
     perf.setStyle(TableStyle([
@@ -308,6 +324,9 @@ def generate_pdf(report_data: dict, candidate: dict, output_path: str = None) ->
             situation = _esc(item.get("situation", ""))
             transcript= (item.get("transcript") or "").strip()
             score     = item.get("score", 0)
+            base_score   = item.get("base_score", score)
+            english_prof = item.get("english_proficiency", 1.0)
+            english_note = item.get("english_note", "")
 
             if not transcript:
                 flag = "Not answered"
@@ -319,11 +338,24 @@ def generate_pdf(report_data: dict, candidate: dict, output_path: str = None) ->
             # Preserve paragraph breaks in the transcript (reportlab HTML)
             transcript_html = _esc(transcript).replace("\n", "<br/>") if transcript else "<i>(no response)</i>"
 
+            # v2.4: render score with one decimal (English-adjusted is float).
+            # Show base→adjusted only when adjustment was applied (factor < 1.0).
+            try:
+                snum = float(score); bnum = float(base_score); ef = float(english_prof)
+            except (TypeError, ValueError):
+                snum, bnum, ef = score, base_score, 1.0
+            if abs(snum - bnum) >= 0.1 and ef < 0.99:
+                score_label = f"{snum:.1f} / 10  <font size=8 color='#888'>(base {bnum:.0f} × English {ef:.2f})</font>"
+            elif isinstance(snum, float) and abs(snum - round(snum)) > 0.05:
+                score_label = f"{snum:.1f} / 10"
+            else:
+                score_label = f"{int(round(snum))} / 10"
+
             # Header row: Q# + competency | score
             q_hdr = Table([
                 [
                     Paragraph(f"Q{qn} &nbsp; &mdash; &nbsp; {comp}", qhdr_sty),
-                    Paragraph(f"{int(score)} / 10", score_sty),
+                    Paragraph(score_label, score_sty),
                 ]
             ], colWidths=[13.5*cm, 3.5*cm])
             q_hdr.setStyle(TableStyle([

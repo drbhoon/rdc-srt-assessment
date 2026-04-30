@@ -669,6 +669,86 @@ async def start_session(candidate: CandidateInfo):
     ]
     return {"session_id": session_id, "questions": safe_questions, "total_questions": len(questions)}
 
+# ─── v2.4 SCORING / READINESS HELPERS ────────────────────────────────────────
+ENGLISH_WEIGHT = 0.15  # 15% of every question is allocated to English proficiency
+
+def _adjust_for_english(base_total: int | float, english_factor: float | None) -> float:
+    """Apply the 15% English-proficiency multiplier to a base content score.
+
+    final = base × (0.85 + 0.15 × english_factor)
+    where english_factor is 0.0 (full Hindi) to 1.0 (clean English).
+
+    If english_factor is None (legacy data, scoring error), default to 1.0 —
+    no adjustment, i.e. the base score is used unchanged. This keeps old
+    reports backward-compatible.
+
+    Returns a float rounded to 1 decimal, capped at 10.0.
+    """
+    try:
+        ef = float(english_factor) if english_factor is not None else 1.0
+    except (TypeError, ValueError):
+        ef = 1.0
+    ef = max(0.0, min(1.0, ef))  # clamp
+    multiplier = (1.0 - ENGLISH_WEIGHT) + ENGLISH_WEIGHT * ef
+    adjusted = round(float(base_total) * multiplier, 1)
+    return min(10.0, max(0.0, adjusted))
+
+
+def _compute_readiness_tier(normalized: float, competency_summary: dict) -> dict:
+    """5-tier readiness with per-competency floor demotion.
+
+    Returns a dict: {tier, reason, weakest_competency, weakest_score}
+    so the report can explain WHY a high-total candidate landed in a
+    lower tier (e.g., "demoted because Vendor Mgmt = 6.0 < 6.5 floor").
+    """
+    if not competency_summary:
+        return {"tier": "Low Potential", "reason": "no competency data",
+                "weakest_competency": None, "weakest_score": None}
+
+    weakest_comp = min(competency_summary, key=lambda k: competency_summary[k])
+    weakest_score = competency_summary[weakest_comp]
+
+    # Walk top-down. First tier where BOTH score band AND competency floor
+    # are satisfied is the candidate's tier.
+    tiers = [
+        ("Ready for Higher Responsibility", 80, 6.5),
+        ("Ready to be Plant Manager",       70, 6.0),
+        ("Ready with Structured Support",   50, 5.0),
+        ("Not Yet Ready",                   30, 0.0),  # no competency floor
+        ("Low Potential",                    0, 0.0),  # catch-all
+    ]
+    for tier_name, score_min, comp_floor in tiers:
+        if normalized >= score_min and weakest_score >= comp_floor:
+            # Determine if this is a demotion (score qualifies for higher tier
+            # but competency floor knocked them down)
+            demoted_from = None
+            for higher_tier, hs_min, hcomp_floor in tiers:
+                if higher_tier == tier_name:
+                    break
+                if normalized >= hs_min and weakest_score < hcomp_floor:
+                    demoted_from = higher_tier
+                    break
+            reason = (
+                f"score {normalized:.1f}% qualifies for '{demoted_from}', "
+                f"but {weakest_comp} ({weakest_score:.1f}) is below that "
+                f"tier's {hcomp_floor} competency floor"
+            ) if demoted_from else (
+                f"score {normalized:.1f}% and weakest competency "
+                f"{weakest_comp} ({weakest_score:.1f}) qualify for this tier"
+            )
+            return {
+                "tier": tier_name,
+                "reason": reason,
+                "weakest_competency": weakest_comp,
+                "weakest_score": weakest_score,
+                "demoted_from": demoted_from,
+            }
+
+    # Should never reach here given the catch-all but for safety:
+    return {"tier": "Low Potential", "reason": "fell through tier checks",
+            "weakest_competency": weakest_comp, "weakest_score": weakest_score}
+
+
 # ─── BACKGROUND TASK: Process entire assessment asynchronously ───────────────
 async def process_assessment_async(session_id: str) -> None:
     """Score all questions + generate report in a background thread pool.
@@ -744,12 +824,22 @@ async def process_assessment_async(session_id: str) -> None:
                     "improvements": [f"Scoring error: {str(exc)[:80]}"],
                 }
 
+            # v2.4: apply 15% English-proficiency adjustment per question.
+            # `score` (authoritative — used everywhere else) is the adjusted
+            # value; `base_score` is preserved for transparency / debugging.
+            base_total     = int(result.get("total", 0))
+            english_factor = result.get("english_proficiency")
+            adjusted_score = _adjust_for_english(base_total, english_factor)
+
             scores[srt_id] = {
-                "competency":   q["primary_competency"],
-                "score":        int(result.get("total", 0)),
-                "strengths":    result.get("strengths", []),
-                "improvements": result.get("improvements", []),
-                "details":      result,
+                "competency":           q["primary_competency"],
+                "score":                adjusted_score,           # authoritative (English-adjusted)
+                "base_score":           base_total,               # pre-adjustment content score
+                "english_proficiency":  english_factor if english_factor is not None else 1.0,
+                "english_note":         result.get("english_note", ""),
+                "strengths":            result.get("strengths", []),
+                "improvements":         result.get("improvements", []),
+                "details":              result,
             }
             session["scores"]   = scores
             session["progress"] = i + 1
@@ -774,7 +864,10 @@ async def process_assessment_async(session_id: str) -> None:
                     "secondary_competency": q.get("secondary_competency", ""),
                     "situation":            q["situation"],
                     "transcript":           collected_answers.get(srt_id, ""),
-                    "score":                sc["score"],
+                    "score":                sc["score"],                                      # English-adjusted
+                    "base_score":           sc.get("base_score", sc["score"]),                # pre-adjustment
+                    "english_proficiency":  sc.get("english_proficiency", 1.0),
+                    "english_note":         sc.get("english_note", ""),
                     "strengths":            sc["strengths"],
                     "improvements":         sc["improvements"],
                 })
@@ -785,24 +878,39 @@ async def process_assessment_async(session_id: str) -> None:
                     "situation":            q["situation"],
                     "transcript":           "",
                     "score":                0,
+                    "base_score":           0,
+                    "english_proficiency":  1.0,
+                    "english_note":         "",
                     "strengths":            [],
                     "improvements":         ["Not answered — counted as zero."],
                 })
 
         # ── Step 2b: Compute all numeric fields in Python (authoritative) ────
-        overall_score = sum(r["score"] for r in results)
+        # Sum English-adjusted question scores (floats). Total still capped at 300.
+        overall_score = round(sum(float(r["score"]) for r in results), 1)
+        base_overall  = round(sum(float(r.get("base_score", r["score"])) for r in results), 1)
         normalized_score = round((overall_score / 300) * 100, 1)
+        base_normalized  = round((base_overall  / 300) * 100, 1)
 
         comp_buckets: dict = defaultdict(list)
         for r in results:
-            comp_buckets[r["competency"]].append(r["score"])
+            comp_buckets[r["competency"]].append(float(r["score"]))
         python_competency_summary = {
             comp: round(sum(sc) / len(sc), 1)
             for comp, sc in comp_buckets.items()
         }
         logger.info(
-            "Python-computed scores — total: %d/300 (%.1f%%)",
-            overall_score, normalized_score,
+            "Python-computed scores — adjusted: %.1f/300 (%.1f%%) | "
+            "base: %.1f/300 (%.1f%%)  [English weighting %.0f%%]",
+            overall_score, normalized_score, base_overall, base_normalized,
+            ENGLISH_WEIGHT * 100,
+        )
+
+        # ── 5-tier readiness with competency floor (v2.4 deterministic) ──────
+        readiness_info = _compute_readiness_tier(normalized_score, python_competency_summary)
+        logger.info(
+            "Readiness tier for %s: '%s' — %s",
+            session_id, readiness_info["tier"], readiness_info["reason"],
         )
 
         # ── Step 3: Generate final report ────────────────────────────────────
@@ -821,28 +929,41 @@ async def process_assessment_async(session_id: str) -> None:
             report_data["normalized_score_out_of_100"] = normalized_score
             report_data["competency_summary"]          = python_competency_summary
 
-            # ── Readiness floor (3-tier rule) ────────────────────────────────
-            # Below 50% normalized → force "Not ready yet" regardless of what
-            # Claude concluded. Above 50%, keep Claude's holistic judgment
-            # (Ready for higher responsibility / Ready with structured support).
+            # v2.4: expose base (pre-English-adjustment) numbers too so the
+            # PDF can show the breakdown ("Base 200 → English-adjusted 188")
+            report_data["base_score_out_of_300"]       = base_overall
+            report_data["base_normalized_out_of_100"]  = base_normalized
+            report_data["english_weight_pct"]          = ENGLISH_WEIGHT * 100
+
+            # ── 5-tier deterministic readiness override ──────────────────────
+            # The skill prompt asks Claude to use these tier names too, but
+            # the app is the single source of truth. Tier is computed from
+            # (normalized_score, weakest competency average) per v2.4 rules.
             claude_readiness = (report_data.get("overall_readiness") or "").strip()
-            if normalized_score < 50:
-                report_data["overall_readiness"] = "Not ready yet"
-                if claude_readiness.lower() not in ("not ready yet", "not yet ready"):
-                    logger.info(
-                        "Readiness floor applied for %s: %.1f%% < 50%% — "
-                        "overriding '%s' → 'Not ready yet'",
-                        session_id, normalized_score, claude_readiness,
-                    )
+            report_data["overall_readiness"]      = readiness_info["tier"]
+            report_data["readiness_explanation"]  = readiness_info["reason"]
+            report_data["readiness_demoted_from"] = readiness_info.get("demoted_from")
+            report_data["weakest_competency"]     = readiness_info.get("weakest_competency")
+            report_data["weakest_competency_score"] = readiness_info.get("weakest_score")
+            if claude_readiness and claude_readiness != readiness_info["tier"]:
+                logger.info(
+                    "Tier override for %s: Claude said '%s' → app computed '%s' (%s)",
+                    session_id, claude_readiness, readiness_info["tier"],
+                    readiness_info["reason"],
+                )
 
             # Attach verbatim transcript appendix for PDF Section 12
+            # Includes English proficiency per question for transparency
             report_data["transcript_appendix"] = [
                 {
-                    "question_number": i + 1,
-                    "competency":      r["competency"],
-                    "situation":       r["situation"],
-                    "transcript":      r["transcript"],
-                    "score":           r["score"],
+                    "question_number":      i + 1,
+                    "competency":           r["competency"],
+                    "situation":            r["situation"],
+                    "transcript":           r["transcript"],
+                    "score":                r["score"],          # English-adjusted
+                    "base_score":           r.get("base_score", r["score"]),
+                    "english_proficiency":  r.get("english_proficiency", 1.0),
+                    "english_note":         r.get("english_note", ""),
                 }
                 for i, r in enumerate(results)
             ]

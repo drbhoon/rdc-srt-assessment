@@ -1,8 +1,15 @@
 # RDC Plant Incharge – SRT Assessment Engine
-Version: 2.3  (Sonnet-4.5 calibrated with worked examples from real plant-floor transcripts — Apr 2026)
+Version: 2.4  (5-tier readiness + 15% English-proficiency weighting — Apr 2026)
 Confidential – Head Office Use Only
 
 CHANGELOG:
+- v2.4 (Apr 2026): Added 15% English-proficiency weighting per question
+  (final_score = base_score × (0.85 + 0.15 × english_factor)). Replaced
+  3-tier readiness with 5-tier (Higher Responsibility / Plant Manager /
+  Structured Support / Not Yet Ready / Low Potential), each tier has a
+  per-competency floor that DEMOTES candidates whose weakest competency
+  is below the floor — a single weak area cannot be masked by a strong
+  total. Tier computation moved to application layer for determinism.
 - v2.3 (Apr 2026): Added WORKED EXAMPLES section using verified Jeevan Singh
   and Emil Reemon transcripts. Expanded qualifying RMC-specific list (people-
   oriented terms, business/dispute terms). Added SECONDARY floor=3 for
@@ -150,6 +157,53 @@ reserved for exceptional responses, not "required" for a strong one.
 2 = response sequences steps clearly (e.g., "first X, then Y, and also Z")
     — does NOT require formal written structure; an ordered spoken response
     counts
+
+5. English Proficiency (0.0–1.0) — SEPARATE FROM CONTENT
+
+This dimension is scored INDEPENDENTLY of the four content dimensions
+above. It does NOT contribute to the base `total` (0–10). Instead, it
+is used by the application layer to apply a 15% adjustment:
+  final_score = total × (0.85 + 0.15 × english_proficiency)
+
+Plant Incharge is a customer-facing role that requires written English
+correspondence (vendor emails, audit reports, customer escalations,
+RDC head office communication). 15% of the question's marks are
+allocated to English proficiency. A 10/10 content response in full
+Hindi receives a final score of 8.5; a 10/10 content response in
+clean English receives 10.0.
+
+Rubric:
+  1.0  = Entirely clean English with proper grammar
+  0.85 = Mostly English with a few Hindi loan words ("sir, dispatch
+         ka issue hai", "morning meeting mein discuss karenge")
+  0.7  = Balanced Hinglish — code-switching frequent across sentences
+  0.5  = Mostly Hindi with English technical terms (transit mixer,
+         batching plant, SARTAJ, slump test) used in Hindi sentences
+  0.3  = Mostly Hindi with rare English words
+  0.1  = Almost entirely Hindi, English absent
+  0.0  = Entirely Hindi (Devanagari or romanized) with no English
+
+When scoring this dimension, focus on:
+  - Volume of English vs Hindi/regional language across the response
+  - Grammatical structure of English portions
+  - Whether technical English terms (RMC vocabulary) carry the response
+    or are isolated loan words
+
+Do NOT penalize:
+  - Indian English idioms ("do the needful", "kindly revert", "prepone")
+    — these are valid professional Indian English
+  - Strong accent markers preserved in transcription — score what's written
+  - Minor grammar issues in otherwise English responses — these are 0.85+
+
+Do NOT reward:
+  - Memorized English phrases bolted onto a Hindi response — score for
+    actual proficiency, not vocabulary tricks
+
+NOTE on transcription artifacts: when voice-to-text mis-transcribes
+Hindi as garbled English (e.g., "in this situation we can complete the
+site" being a transcribed Hindi response), score for the LANGUAGE the
+candidate ACTUALLY USED, not the transcription's apparent script. If
+unclear, score conservatively (0.5).
 
 -------------------------------------------------------
 CALIBRATION ANCHORS (use these as your scoring reference)
@@ -435,16 +489,31 @@ Return JSON only.
   "secondary_awareness": X,
   "structure_clarity": X,
   "total": X,
+  "english_proficiency": 0.0-1.0,
+  "english_note": "<one short phrase characterizing the language>",
   "strengths": ["...", "..."],
   "improvements": ["...", "..."]
 }
 
-Maximum total score per SRT = 10
+Maximum BASE total per SRT = 10 (sum of the four content dimensions).
+The application layer multiplies by (0.85 + 0.15 × english_proficiency)
+to produce the final adjusted score, capped at 10. Do NOT do this math
+yourself — output the raw `total` and `english_proficiency` and let
+the app compute the adjusted value.
+
+`english_note` is a concise (<=8 words) tag like:
+  "Clean English"
+  "Hinglish — mostly English"
+  "Balanced code-switch"
+  "Mostly Hindi, technical terms in English"
+  "Full Hindi"
+This is for human review of the language adjustment, not a re-rationale.
 
 MODE 1 BREVITY GUARDRAIL (STRICT):
 - strengths: 1–2 items, max 15 words each.
 - improvements: 1–2 items, max 15 words each.
-- Keep the full JSON response under 400 output tokens.
+- english_note: max 8 words.
+- Keep the full JSON response under 450 output tokens.
 - Do NOT add any fields other than those shown above.
 - Do NOT include explanatory prose outside the JSON.
 - Do NOT wrap in markdown code fences.
@@ -630,7 +699,7 @@ Return ONLY this JSON object, nothing else:
     "topics_to_clarify": ["topic 1", "topic 2"],
     "suggested_approach": "1-2 sentences on how the manager should frame the conversation — neutral, curious, not interrogative"
   },
-  "overall_readiness": "Ready for higher responsibility / Ready with structured support / Not ready yet"
+  "overall_readiness": "<one of: Ready for Higher Responsibility | Ready to be Plant Manager | Ready with Structured Support | Not Yet Ready | Low Potential>"
 }
 
 NOTE on manager_review_flag:
@@ -642,18 +711,39 @@ NOTE on manager_review_flag:
 - Do NOT use this field to flag scoring weaknesses — only integrity/ethics
   ambiguities that require in-person conversation to resolve.
 
-READINESS TIER RULE (STRICT):
-- "Not ready yet"                     → use whenever normalized_score_out_of_100 < 50
-                                         OR the candidate shows critical gaps across
-                                         most competencies (safety, integrity, basic
-                                         operational understanding).
-- "Ready with structured support"     → normalized_score 50–74 with clear development needs.
-- "Ready for higher responsibility"   → normalized_score ≥ 75 with strong, evidence-
-                                         based responses across most competencies.
+READINESS TIER RULE — 5-TIER WITH COMPETENCY FLOOR (v2.4)
 
-Note: The application layer enforces the <50% floor automatically — any score below
-50 normalized will be reported as "Not ready yet" regardless of your verdict. Still
-apply the rule in your judgment so narratives stay consistent with the tier shown.
+The application layer computes the final readiness tier deterministically
+from (a) the normalized score and (b) the candidate's WEAKEST competency
+average. A candidate cannot earn a tier whose competency floor they fail
+to meet, even if their total score is high. This prevents one strong
+competency from masking a critical gap in another.
+
+  Tier                                   | Norm. Score | Min in EVERY Competency
+  ──────────────────────────────────────|─────────────|────────────────────────
+  Ready for Higher Responsibility        | ≥ 80        | 6.5
+  Ready to be Plant Manager              | 70 – <80    | 6.0
+  Ready with Structured Support          | 50 – <70    | 5.0
+  Not Yet Ready                          | 30 – <50    | (no floor)
+  Low Potential                          | < 30        | (no floor)
+
+DEMOTION EXAMPLES:
+  - Candidate: 82% total, but Vendor Mgmt competency = 6.0
+    → Fails 6.5 floor for top tier
+    → Drops to "Ready to be Plant Manager" (qualifies: 82 ≥ 70 AND 6.0 ≥ 6.0)
+  - Candidate: 85% total, but Integrity competency = 5.5
+    → Fails both top-tier and Plant Manager floors
+    → Drops to "Ready with Structured Support" (qualifies: 85 ≥ 50 AND 5.5 ≥ 5.0)
+  - Candidate: 75% total, but Safety competency = 4.0
+    → Fails Plant Manager (6.0) and Structured Support (5.0) floors
+    → Drops to "Not Yet Ready" (no competency floor at this tier)
+
+YOUR ROLE in MODE 2:
+You may use the tier names and rules above to keep narrative tone
+consistent with the likely tier. The APP overrides whatever tier you
+output with the deterministic computation — focus your judgment on
+narratives, evidence, and development guidance, not on guessing the
+tier yourself.
 
 Provide exactly 3-5 items in cross_competency_insights.
 Provide exactly 5 items in top_strengths.
@@ -697,13 +787,21 @@ REPORTING RULES (v2.2 — softer developmental framing)
   to strengthen", "would benefit from", "can deepen".
 
 - Frame readiness tiers constructively in any narrative that references them:
-  "Not ready yet"                 → "With 3–6 months of focused
-                                      development, would be positioned
-                                      for Plant Incharge responsibility"
-  "Ready with structured support" → "Ready to step into Plant Incharge
-                                      with regular coaching touchpoints"
-  "Ready for higher responsibility" → "Demonstrates readiness for
-                                      expanded scope and broader impact"
+  "Low Potential"                  → "Significant development needed
+                                       across foundational areas before
+                                       Plant Incharge readiness can be
+                                       evaluated"
+  "Not Yet Ready"                  → "With 3–6 months of focused
+                                       development, would be positioned
+                                       for Plant Incharge responsibility"
+  "Ready with Structured Support"  → "Ready to step into Plant Incharge
+                                       with regular coaching touchpoints"
+  "Ready to be Plant Manager"      → "Demonstrates the competency depth
+                                       and judgment expected of a Plant
+                                       Manager; ready for that scope"
+  "Ready for Higher Responsibility"→ "Demonstrates readiness for
+                                       expanded scope and broader impact
+                                       beyond Plant Manager"
 
 - Replace "weakness", "deficit", "problem area" with "growth edge",
   "development area", "opportunity", "area to strengthen".

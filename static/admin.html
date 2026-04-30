@@ -4,8 +4,8 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Admin Panel – RDC SRT Assessment</title>
-  <!-- v4.18 — assessment timeout-modal title fixed + no-cache for assessment.html + boot log for ASSESSMENT_MINUTES -->
-  <link rel="stylesheet" href="/static/style.css?v=4.18"/>
+  <!-- v4.19 — 5-tier readiness with competency floor + 15% English proficiency weighting per question -->
+  <link rel="stylesheet" href="/static/style.css?v=4.19"/>
   <style>
     body { background: #f0f3f8; }
 
@@ -90,10 +90,12 @@
       border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; margin-left: 6px; }
     .btn-clearlock:hover { background: #c8600c; }
 
-    /* Readiness colors */
-    .ready-high { color: #1a7a1a; font-weight: 700; }
-    .ready-mid  { color: #cc7700; font-weight: 700; }
-    .ready-low  { color: #cc0000; font-weight: 700; }
+    /* Readiness colors — v2.4 5-tier */
+    .ready-high { color: #0f5a0f; font-weight: 700; }  /* Ready for Higher Responsibility */
+    .ready-pm   { color: #1a7a1a; font-weight: 700; }  /* Ready to be Plant Manager */
+    .ready-mid  { color: #cc7700; font-weight: 700; }  /* Ready with Structured Support */
+    .ready-low  { color: #cc0000; font-weight: 700; }  /* Not Yet Ready */
+    .ready-vlow { color: #7a0000; font-weight: 700; }  /* Low Potential */
 
     /* Action buttons */
     .btn-view { background: var(--blue); color: #fff; border: none; padding: 5px 12px;
@@ -268,7 +270,7 @@
     <div>
       <h1>
         RDC – Plant Incharge Situation Based Competency Assessment Engine
-        <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.18</span>
+        <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.19</span>
       </h1>
       <div class="sub">Admin Panel | Confidential – Head Office Use Only</div>
     </div>
@@ -602,11 +604,16 @@ function renderTable() {
   });
 }
 
+// v2.4: 5-tier readiness color mapping. Order matters — check most-specific
+// substrings first so "Ready for Higher Responsibility" doesn't match the
+// less-specific "Ready" prefix.
 function readinessClass(text) {
   const t = (text || '').toLowerCase();
-  if (t.includes('higher')) return 'ready-high';
-  if (t.includes('structured')) return 'ready-mid';
-  if (t.includes('not ready')) return 'ready-low';
+  if (t.includes('higher'))         return 'ready-high';   // Ready for Higher Responsibility
+  if (t.includes('plant manager'))  return 'ready-pm';     // Ready to be Plant Manager
+  if (t.includes('structured'))     return 'ready-mid';    // Ready with Structured Support
+  if (t.includes('low potential'))  return 'ready-vlow';   // Low Potential
+  if (t.includes('not ready') || t.includes('not yet')) return 'ready-low';  // Not Yet Ready
   return '';
 }
 
