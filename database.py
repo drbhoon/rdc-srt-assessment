@@ -49,6 +49,12 @@ def init_db():
                     created_at       TIMESTAMP DEFAULT NOW()
                 )
             """)
+            # v4.20 watchdog migration — add processing_started_at column if
+            # missing, so we can detect stuck pipelines automatically. Idempotent.
+            cur.execute("""
+                ALTER TABLE sessions
+                ADD COLUMN IF NOT EXISTS processing_started_at TIMESTAMP NULL
+            """)
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS access_codes (
                     code        TEXT PRIMARY KEY,
@@ -59,7 +65,7 @@ def init_db():
                 )
             """)
         conn.commit()
-        logger.info("PostgreSQL sessions + access_codes tables ready")
+        logger.info("PostgreSQL sessions + access_codes tables ready (v4.20 watchdog migration applied)")
     finally:
         conn.close()
 
@@ -118,7 +124,8 @@ def get_session(session_id: str) -> Optional[dict]:
                 """SELECT candidate_name, plant_location, assessment_date,
                           status, progress, error,
                           questions, collected_answers, scores,
-                          report, pdf_data, pdf_error
+                          report, pdf_data, pdf_error,
+                          processing_started_at
                    FROM sessions WHERE session_id = %s""",
                 (session_id,),
             )
@@ -141,6 +148,7 @@ def get_session(session_id: str) -> Optional[dict]:
                 "report":            row[9] if isinstance(row[9], dict) else json.loads(row[9] or "null"),
                 "pdf_bytes":         bytes(row[10]) if row[10] else None,
                 "pdf_error":         row[11],
+                "processing_started_at": row[12].isoformat() if row[12] else None,
             }
     finally:
         conn.close()
@@ -165,6 +173,7 @@ def update_session(session_id: str, **fields):
         "report":            ("report",            lambda v: json.dumps(v)),
         "pdf_bytes":         ("pdf_data",          lambda v: v),  # already bytes
         "pdf_error":         ("pdf_error",         lambda v: v),
+        "processing_started_at": ("processing_started_at", lambda v: v),  # datetime or None
     }
 
     sets, vals = [], []
@@ -241,7 +250,7 @@ def list_sessions() -> List[dict]:
             cur.execute(
                 """SELECT session_id, candidate_name, plant_location, assessment_date,
                           status, scores, report, pdf_data IS NOT NULL, error, created_at,
-                          collected_answers
+                          collected_answers, processing_started_at
                    FROM sessions ORDER BY created_at DESC NULLS LAST, assessment_date DESC"""
             )
             result = []
@@ -263,8 +272,58 @@ def list_sessions() -> List[dict]:
                     "has_pdf":            row[7],
                     "error":              row[8],
                     "created_at":         row[9].isoformat() if row[9] else None,
+                    "processing_started_at": row[11].isoformat() if row[11] else None,
                 })
             return result
+    finally:
+        conn.close()
+
+
+# ── v4.20 Watchdog: auto-fail stale processing sessions ──────────────────────
+def auto_fail_stale_processing(timeout_minutes: int = 15) -> int:
+    """Sweep sessions whose status='processing' but processing_started_at is
+    older than the timeout. Flip them to status='failed' with a clear marker
+    so the admin doesn't have to click Clear Lock manually.
+
+    Returns the number of sessions auto-failed. Safe to call frequently
+    (it's a single bounded UPDATE).
+
+    Background-task pipelines on Railway sometimes die silently when the
+    worker process restarts (deploy / OOM / asyncio task GC). Without a
+    watchdog, those sessions stay 'processing' forever, requiring manual
+    Clear Lock + Rescore. With this watchdog, they auto-recover within
+    one timeout window.
+    """
+    if not DATABASE_URL:
+        # In-memory mode — no easy way to track timestamps; skip
+        return 0
+
+    conn = _get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """UPDATE sessions
+                   SET status = 'failed',
+                       error  = COALESCE(NULLIF(error,''), %s),
+                       processing_started_at = NULL
+                   WHERE status = 'processing'
+                     AND processing_started_at IS NOT NULL
+                     AND processing_started_at < NOW() - (%s || ' minutes')::interval
+                """,
+                (
+                    f"Watchdog auto-fail: pipeline stuck in processing >{timeout_minutes} min "
+                    "(likely worker restart / silent crash). Click Rescore to retry.",
+                    str(timeout_minutes),
+                ),
+            )
+            count = cur.rowcount
+        conn.commit()
+        if count:
+            logger.warning(
+                "Watchdog auto-failed %d stale 'processing' session(s) (>%d min)",
+                count, timeout_minutes,
+            )
+        return count
     finally:
         conn.close()
 

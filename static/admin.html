@@ -4,8 +4,8 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Admin Panel – RDC SRT Assessment</title>
-  <!-- v4.19 — 5-tier readiness with competency floor + 15% English proficiency weighting per question -->
-  <link rel="stylesheet" href="/static/style.css?v=4.19"/>
+  <!-- v4.20 — stuck-pipeline watchdog: auto-fails sessions stuck >15 min in processing (kills the manual Clear Lock cycle) -->
+  <link rel="stylesheet" href="/static/style.css?v=4.20"/>
   <style>
     body { background: #f0f3f8; }
 
@@ -270,7 +270,7 @@
     <div>
       <h1>
         RDC – Plant Incharge Situation Based Competency Assessment Engine
-        <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.19</span>
+        <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.20</span>
       </h1>
       <div class="sub">Admin Panel | Confidential – Head Office Use Only</div>
     </div>
@@ -565,7 +565,20 @@ function renderTable() {
       const errTip = s.error ? escHtml(s.error) : 'Pipeline failed — click Rescore to retry';
       badgeHtml = `<span class="badge-failed" title="${errTip}">❌ Failed</span>`;
     } else if (isProcessing && hasFullAnsw) {
-      badgeHtml = `<span class="badge-stuck" title="All 30 answers submitted but status is still 'processing'. Likely the backend container was killed before the pipeline finished (common during a Railway redeploy). Click 🔍 Diagnose to see details, or 🔁 Rescore to re-run.">⏱ Stuck (processing)</span>`;
+      // v4.20: differentiate "running" from "actually stuck" using
+      // processing_started_at duration. <5 min = likely running. >5 min = stuck.
+      let mins = null;
+      if (s.processing_started_at) {
+        const startMs = new Date(s.processing_started_at).getTime();
+        if (!isNaN(startMs)) mins = Math.floor((Date.now() - startMs) / 60000);
+      }
+      if (mins !== null && mins < 5) {
+        badgeHtml = `<span class="badge-processing" title="Pipeline is running now — started ${mins} min ago">🔄 Processing (${mins}m)</span>`;
+      } else if (mins !== null) {
+        badgeHtml = `<span class="badge-stuck" title="Stuck for ${mins} minutes — pipeline likely died (deploy/OOM). Watchdog auto-fails sessions stuck >15 min so you can Rescore without manual Clear Lock.">⏱ Stuck (${mins}m)</span>`;
+      } else {
+        badgeHtml = `<span class="badge-stuck" title="All 30 answers submitted but status is still 'processing'. Watchdog will auto-fail this within 15 min so you can click 🔁 Rescore.">⏱ Stuck (processing)</span>`;
+      }
     } else if (isProcessing) {
       badgeHtml = `<span class="badge-processing" title="Pipeline is running now — AI scoring in flight">🔄 Processing</span>`;
     } else {

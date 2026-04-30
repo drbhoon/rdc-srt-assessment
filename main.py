@@ -25,7 +25,21 @@ from database import (
     delete_session as db_delete_session, list_sessions, reset_session,
     create_access_code, get_access_code, consume_access_code,
     list_access_codes, delete_access_code,
+    auto_fail_stale_processing,
 )
+from datetime import datetime, timezone
+
+# ─── v4.20 Watchdog config ──────────────────────────────────────────────────
+# A pipeline that runs >15 min is almost certainly dead (Railway worker
+# restart, OOM, asyncio task GC). The watchdog sweeps these on every
+# admin sessions-list refresh and auto-fails them, breaking the manual
+# Clear Lock + Rescore cycle.
+WATCHDOG_TIMEOUT_MINUTES = int(os.environ.get("WATCHDOG_TIMEOUT_MINUTES", "15"))
+
+
+def _now_utc() -> datetime:
+    """UTC datetime with tz-aware marker — psycopg2 stores as TIMESTAMP."""
+    return datetime.now(timezone.utc)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -154,7 +168,47 @@ def _get(session_id: str) -> dict | None:
 async def admin_list_sessions(x_admin_token: str = Header(None)):
     if x_admin_token != ADMIN_PASSWORD:
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+    # v4.20 watchdog: sweep stale 'processing' sessions before returning the
+    # list. Any session that's been processing >WATCHDOG_TIMEOUT_MINUTES is
+    # almost certainly dead (Railway worker restart, OOM, asyncio task GC).
+    # Auto-flip to 'failed' so admin can Rescore without the manual Clear
+    # Lock step. Watchdog is idempotent and bounded — safe on every refresh.
+    try:
+        auto_failed = auto_fail_stale_processing(timeout_minutes=WATCHDOG_TIMEOUT_MINUTES)
+        if auto_failed:
+            # Flush stale cache entries so the list returns fresh state
+            for sid in list(_cache.keys()):
+                cached = _cache.get(sid)
+                if cached and cached.get("status") == "processing":
+                    _cache.pop(sid, None)
+            logger.info("Watchdog freed %d stuck session(s) on sessions-list refresh", auto_failed)
+    except Exception as exc:
+        # Watchdog must NEVER break the list endpoint — log and continue
+        logger.warning("Watchdog sweep failed (non-fatal): %s", exc)
+
     return list_sessions()
+
+
+# ─── API: Admin — Watchdog (manual trigger) ──────────────────────────────────
+@app.post("/api/admin/watchdog")
+async def admin_watchdog(timeout_minutes: int | None = None,
+                          x_admin_token: str = Header(None)):
+    """Manually run the stuck-pipeline watchdog. Returns count of auto-failed
+    sessions. The watchdog also runs implicitly on every /api/admin/sessions
+    call, so you usually don't need this — but it's available for forced sweeps.
+    """
+    if x_admin_token != ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    minutes = timeout_minutes if timeout_minutes is not None else WATCHDOG_TIMEOUT_MINUTES
+    count = auto_fail_stale_processing(timeout_minutes=minutes)
+    # Flush stale cache so subsequent list returns the freshly-failed state
+    if count:
+        for sid in list(_cache.keys()):
+            cached = _cache.get(sid)
+            if cached and cached.get("status") == "processing":
+                _cache.pop(sid, None)
+    return {"auto_failed": count, "timeout_minutes": minutes}
 
 # ─── API: Admin — Get Report ─────────────────────────────────────────────────
 @app.get("/api/admin/report/{session_id}")
@@ -213,7 +267,8 @@ async def admin_quick_test(
     session["collected_answers"] = dummy_answers
     session["status"] = "processing"
     _cache[session_id] = session
-    update_session(session_id, status="processing", collected_answers=dummy_answers)
+    update_session(session_id, status="processing", collected_answers=dummy_answers,
+                   processing_started_at=_now_utc())
 
     background_tasks.add_task(process_assessment_async, session_id)
     logger.info("Admin quick-test session %s started (%d questions)", session_id, len(questions))
@@ -289,6 +344,7 @@ async def rescore_session(
             error=None,
             status="processing",
             progress=0,
+            processing_started_at=_now_utc(),
         )
 
         background_tasks.add_task(_pipeline_guarded, session_id, "rescore-full")
@@ -332,6 +388,7 @@ async def rescore_session(
         error=None,
         status="processing",
         progress=valid_prior,
+        processing_started_at=_now_utc(),
     )
 
     background_tasks.add_task(_pipeline_guarded, session_id, "rescore")
@@ -414,6 +471,7 @@ async def rescore_stuck_sessions(
             error=None,
             status="processing",
             progress=valid_prior,
+            processing_started_at=_now_utc(),
         )
         background_tasks.add_task(_pipeline_guarded, sid, "rescore-stuck")
         scheduled.append({"session_id": sid, "resumed_scores": valid_prior})
@@ -551,7 +609,7 @@ async def force_reset_processing(session_id: str, x_admin_token: str = Header(No
     session["status"] = "failed"
     session["error"]  = stock_msg
     _cache[session_id] = session
-    update_session(session_id, status="failed", error=stock_msg)
+    update_session(session_id, status="failed", error=stock_msg, processing_started_at=None)
     logger.info("Admin cleared stuck 'processing' lock on session %s", session_id)
     return {"status": "failed", "session_id": session_id}
 
@@ -975,7 +1033,8 @@ async def process_assessment_async(session_id: str) -> None:
             logger.error("Report generation failed for %s: %s", session_id, exc, exc_info=True)
             session["status"] = "failed"
             session["error"]  = str(exc)
-            update_session(session_id, status="failed", error=str(exc))
+            # v4.20: clear processing_started_at so the watchdog doesn't re-fail us
+            update_session(session_id, status="failed", error=str(exc), processing_started_at=None)
             return
 
         # ── Step 4: Generate PDF ─────────────────────────────────────────────
@@ -990,14 +1049,16 @@ async def process_assessment_async(session_id: str) -> None:
             update_session(session_id, pdf_error=str(exc))
 
         session["status"] = "completed"
-        update_session(session_id, status="completed")
+        # v4.20: clear watchdog timestamp on successful completion
+        update_session(session_id, status="completed", processing_started_at=None)
         logger.info("Session %s fully completed", session_id)
 
     except Exception as exc:
         logger.error("FATAL background task error for session %s: %s", session_id, exc, exc_info=True)
         session["status"] = "failed"
         session["error"]  = f"Unexpected error: {str(exc)}"
-        update_session(session_id, status="failed", error=f"Unexpected error: {str(exc)}")
+        update_session(session_id, status="failed", error=f"Unexpected error: {str(exc)}",
+                       processing_started_at=None)
 
 
 # ─── API: Submit All Answers ─────────────────────────────────────────────────
@@ -1012,7 +1073,8 @@ async def submit_all(req: SubmitAllRequest, background_tasks: BackgroundTasks):
     session["collected_answers"] = req.answers
     session["status"]            = "processing"
     session["progress"]          = 0
-    update_session(req.session_id, collected_answers=req.answers, status="processing", progress=0)
+    update_session(req.session_id, collected_answers=req.answers, status="processing", progress=0,
+                   processing_started_at=_now_utc())
 
     # Route through the shared pipeline semaphore so 11 candidates hitting
     # Submit simultaneously don't stampede the Anthropic rate limit and
