@@ -148,7 +148,12 @@ def get_session(session_id: str) -> Optional[dict]:
                 "report":            row[9] if isinstance(row[9], dict) else json.loads(row[9] or "null"),
                 "pdf_bytes":         bytes(row[10]) if row[10] else None,
                 "pdf_error":         row[11],
-                "processing_started_at": row[12].isoformat() if row[12] else None,
+                # v4.21 — append 'Z' so JS interprets as UTC (not local time).
+                # Column is TIMESTAMP without TZ; we always write _now_utc()
+                # so the naive value IS UTC. Without the Z, browsers in any
+                # non-UTC zone (e.g. IST) misread this as local time and the
+                # elapsed-minutes badge shows ~330m off in IST.
+                "processing_started_at": (row[12].isoformat() + "Z") if row[12] else None,
             }
     finally:
         conn.close()
@@ -271,8 +276,9 @@ def list_sessions() -> List[dict]:
                     "collected_count":    sum(1 for v in collected.values() if (v or "").strip()),
                     "has_pdf":            row[7],
                     "error":              row[8],
-                    "created_at":         row[9].isoformat() if row[9] else None,
-                    "processing_started_at": row[11].isoformat() if row[11] else None,
+                    # v4.21 — append 'Z' so JS interprets as UTC (see get_session)
+                    "created_at":         (row[9].isoformat()  + "Z") if row[9]  else None,
+                    "processing_started_at": (row[11].isoformat() + "Z") if row[11] else None,
                 })
             return result
     finally:
