@@ -36,6 +36,15 @@ class SubmitAllRequest(BaseModel):
     answers: Dict[str, str]   # { srt_id: transcript }
 
 
+class ValidationBatchRequest(BaseModel):
+    # Force-full re-baseline selection. All optional:
+    #   names        → match by candidate name (case-insensitive)
+    #   session_ids  → match by session id
+    #   neither      → ALL completed sessions with stored answers
+    session_ids: Optional[List[str]] = None
+    names:       Optional[List[str]] = None
+
+
 class QuestionOut(BaseModel):
     question_number: int
     srt_id: str

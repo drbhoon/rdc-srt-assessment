@@ -964,35 +964,52 @@ async function rescoreAllStuck() {
   }
 }
 
-// ─── Re-baseline: FORCE-FULL rescore all completed sessions under v2.5 ────────
+// ─── Re-baseline: FORCE-FULL rescore selected (or all) sessions under v2.5 ────
 async function rescoreValidationBatch() {
   const completed = allSessions.filter(s => s.status === 'completed');
   if (!completed.length) {
     alert('No completed sessions to re-baseline.');
     return;
   }
+  // Ask for a name list. Blank = ALL completed. ~$0.43/candidate.
+  const raw = prompt(
+    `⟳⟳ FORCE-FULL RE-BASELINE under current skill (v2.5).\n\n` +
+    `Paste candidate names to re-score (one per line, or comma-separated).\n` +
+    `Names are matched case-insensitively against the table.\n\n` +
+    `Leave BLANK and click OK to re-baseline ALL ${completed.length} completed sessions.\n\n` +
+    `Cost ≈ $0.43 per candidate (~30 Sonnet calls). Prior scores are WIPED.`
+  );
+  if (raw === null) return;   // cancelled
+
+  const names = raw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+  const body  = names.length ? { names } : {};
+  const count = names.length || completed.length;
+  const est   = (count * 0.43).toFixed(2);
+
   if (!confirm(
-    `⟳⟳ RE-BASELINE ${completed.length} completed session(s) under the current skill (v2.5)?\n\n` +
-    `⚠ This WIPES all prior scores and re-scores EVERY question fresh — needed so the\n` +
-    `v2.5 changes (9-cap, double-pass review, per-competency rules) apply to all answers.\n\n` +
-    `Cost: ~30 Sonnet calls per candidate (≈ ${completed.length * 30} calls total).\n` +
-    `At 2 concurrent + caching, expect roughly 1–2 hours for ~100 candidates.\n\n` +
-    `Proceed?`
+    `Force-full re-baseline ${names.length ? names.length + ' named' : 'ALL ' + completed.length} candidate(s)?\n\n` +
+    `Estimated cost ≈ $${est}. Prior scores will be overwritten.\n` +
+    `Runs in background (2 at a time). Proceed?`
   )) return;
-  // Second confirm — this is expensive and destructive of prior scores
-  if (!confirm(`Confirm again: force-full re-baseline ${completed.length} sessions? Prior scores will be overwritten.`)) return;
 
   try {
     const res = await fetch('/api/admin/rescore-validation-batch', {
       method:  'POST',
       headers: { 'X-Admin-Token': adminToken, 'Content-Type': 'application/json' },
-      body:    JSON.stringify({}),   // empty body = all sessions with answers
+      body:    JSON.stringify(body),
     });
     if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
     const d = await res.json();
-    alert(`✅ Re-baseline started: ${d.scheduled} session(s) queued (mode: ${d.mode}, concurrency ${d.concurrency}).\n\n` +
-          `Skipped: ${(d.skipped||[]).length}. This runs in the background — click Refresh periodically. ` +
-          `When done, run Validation data/revalidation_analysis.py to measure the new AI-vs-BH gap.`);
+    let msg = `✅ Re-baseline started: ${d.scheduled} session(s) queued (concurrency ${d.concurrency}).`;
+    if (d.unmatched_names && d.unmatched_names.length) {
+      msg += `\n\n⚠ ${d.unmatched_names.length} name(s) NOT found (check spelling):\n` +
+             d.unmatched_names.slice(0, 20).join('\n');
+    }
+    if (d.skipped && d.skipped.length) {
+      msg += `\n\nSkipped ${d.skipped.length} (no stored answers).`;
+    }
+    msg += `\n\nClick Refresh periodically. When done, run revalidation_analysis.py.`;
+    alert(msg);
     await loadSessions();
   } catch (e) {
     alert('Re-baseline failed: ' + e.message);

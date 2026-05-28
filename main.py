@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, Response
 
 from models import (
     CandidateInfo, ScoreRequest, FinalReportRequest, SubmitAllRequest,
-    AccessCodeValidate, AccessCodeGenerate,
+    AccessCodeValidate, AccessCodeGenerate, ValidationBatchRequest,
 )
 from question_bank import load_questions, get_session_questions
 from scorer import (
@@ -496,8 +496,8 @@ async def rescore_stuck_sessions(
 @app.post("/api/admin/rescore-validation-batch")
 async def rescore_validation_batch(
     background_tasks: BackgroundTasks,
+    payload: ValidationBatchRequest | None = None,
     x_admin_token: str = Header(None),
-    session_ids: list[str] | None = None,
 ):
     """Force-full rescore a set of sessions to RE-BASELINE them under the
     current skill version (v2.5). Unlike smart-resume, this WIPES all prior
@@ -505,31 +505,46 @@ async def rescore_validation_batch(
     calibration change (9-cap, double-pass, per-competency rules) so the new
     logic applies to all 30 questions.
 
-    Body: optional {"session_ids": [...]}. If omitted, force-fulls ALL
-    sessions that have stored answers (use for the full 102-candidate
-    re-baseline). Sessions queue behind the pipeline semaphore (cap=2).
+    Body (all optional):
+      {"names": ["Dibyendu Pal", ...]}   → match by candidate name (case-insensitive)
+      {"session_ids": [...]}             → match by session id
+      {} or no body                      → ALL completed sessions with answers
+    Sessions queue behind the pipeline semaphore (cap=2).
 
-    Cost note: ~30 Sonnet calls per candidate. For 102 candidates that is
-    ~3,060 calls; with caching + cap=2 expect ~1-2 hours of wall time.
+    Cost note: ~30 Sonnet calls per candidate (~$0.43 each). 36 candidates
+    ≈ $15.5; 102 ≈ $44. With caching + cap=2 expect ~20-40 min for 36.
     """
     if x_admin_token != ADMIN_PASSWORD:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
+    payload = payload or ValidationBatchRequest()
+    target_ids   = set(payload.session_ids) if payload.session_ids else None
+    target_names = (
+        {n.strip().lower() for n in payload.names if n and n.strip()}
+        if payload.names else None
+    )
+
     summary = list_sessions()
-    target_ids = set(session_ids) if session_ids else None
     scheduled: list[str] = []
     skipped:   list[dict] = []
+    matched_names: set = set()
 
     for s in summary:
-        sid = s["session_id"]
+        sid  = s["session_id"]
+        name = (s.get("candidate_name") or "").strip()
+        # Selection filters
         if target_ids is not None and sid not in target_ids:
             continue
+        if target_names is not None:
+            if name.lower() not in target_names:
+                continue
+            matched_names.add(name.lower())
         if (s.get("collected_count", 0) or 0) <= 0:
-            skipped.append({"session_id": sid, "reason": "no stored answers"})
+            skipped.append({"session_id": sid, "name": name, "reason": "no stored answers"})
             continue
         full = _get(sid)
         if not full or not (full.get("collected_answers") or {}):
-            skipped.append({"session_id": sid, "reason": "no answers in record"})
+            skipped.append({"session_id": sid, "name": name, "reason": "no answers in record"})
             continue
 
         # FORCE-FULL wipe — every question re-scored under v2.5
@@ -547,18 +562,24 @@ async def rescore_validation_batch(
             processing_started_at=_now_utc(),
         )
         background_tasks.add_task(_pipeline_guarded, sid, "rescore-validation-batch")
-        scheduled.append(sid)
+        scheduled.append(name or sid)
+
+    # Names requested but not found in any session (typos / not in DB)
+    unmatched_names = []
+    if target_names is not None:
+        unmatched_names = sorted(target_names - matched_names)
 
     logger.info(
-        "Admin validation-batch FORCE-FULL rescore: %d scheduled, %d skipped (cap=%d)",
-        len(scheduled), len(skipped), _PIPELINE_MAX_CONCURRENT,
+        "Admin validation-batch FORCE-FULL: %d scheduled, %d skipped, %d unmatched names (cap=%d)",
+        len(scheduled), len(skipped), len(unmatched_names), _PIPELINE_MAX_CONCURRENT,
     )
     return {
-        "mode":        "force-full-batch",
-        "scheduled":   len(scheduled),
-        "session_ids": scheduled,
-        "skipped":     skipped,
-        "concurrency": _PIPELINE_MAX_CONCURRENT,
+        "mode":            "force-full-batch",
+        "scheduled":       len(scheduled),
+        "scheduled_names": scheduled,
+        "skipped":         skipped,
+        "unmatched_names": unmatched_names,
+        "concurrency":     _PIPELINE_MAX_CONCURRENT,
     }
 
 
