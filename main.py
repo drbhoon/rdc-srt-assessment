@@ -17,7 +17,10 @@ from models import (
     AccessCodeValidate, AccessCodeGenerate,
 )
 from question_bank import load_questions, get_session_questions
-from scorer import score_question
+from scorer import (
+    score_question, review_pass,
+    REVIEW_LOW_THRESHOLD, REVIEW_HIGH_THRESHOLD,
+)
 from report_generator import generate_final_report
 from pdf_generator import generate_pdf
 from database import (
@@ -489,6 +492,74 @@ async def rescore_stuck_sessions(
     }
 
 
+# ─── API: Admin — Bulk FORCE-FULL rescore (re-baseline under current skill) ──
+@app.post("/api/admin/rescore-validation-batch")
+async def rescore_validation_batch(
+    background_tasks: BackgroundTasks,
+    x_admin_token: str = Header(None),
+    session_ids: list[str] | None = None,
+):
+    """Force-full rescore a set of sessions to RE-BASELINE them under the
+    current skill version (v2.5). Unlike smart-resume, this WIPES all prior
+    scores so every question is re-scored fresh — required after a skill
+    calibration change (9-cap, double-pass, per-competency rules) so the new
+    logic applies to all 30 questions.
+
+    Body: optional {"session_ids": [...]}. If omitted, force-fulls ALL
+    sessions that have stored answers (use for the full 102-candidate
+    re-baseline). Sessions queue behind the pipeline semaphore (cap=2).
+
+    Cost note: ~30 Sonnet calls per candidate. For 102 candidates that is
+    ~3,060 calls; with caching + cap=2 expect ~1-2 hours of wall time.
+    """
+    if x_admin_token != ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    summary = list_sessions()
+    target_ids = set(session_ids) if session_ids else None
+    scheduled: list[str] = []
+    skipped:   list[dict] = []
+
+    for s in summary:
+        sid = s["session_id"]
+        if target_ids is not None and sid not in target_ids:
+            continue
+        if (s.get("collected_count", 0) or 0) <= 0:
+            skipped.append({"session_id": sid, "reason": "no stored answers"})
+            continue
+        full = _get(sid)
+        if not full or not (full.get("collected_answers") or {}):
+            skipped.append({"session_id": sid, "reason": "no answers in record"})
+            continue
+
+        # FORCE-FULL wipe — every question re-scored under v2.5
+        full["scores"]    = {}
+        full["report"]    = None
+        full["pdf_bytes"] = None
+        full["pdf_error"] = None
+        full["error"]     = None
+        full["status"]    = "processing"
+        full["progress"]  = 0
+        _cache[sid]       = full
+        update_session(
+            sid, scores={}, report=None, pdf_bytes=None, pdf_error=None,
+            error=None, status="processing", progress=0,
+            processing_started_at=_now_utc(),
+        )
+        background_tasks.add_task(_pipeline_guarded, sid, "rescore-validation-batch")
+        scheduled.append(sid)
+
+    logger.info(
+        "Admin validation-batch FORCE-FULL rescore: %d scheduled, %d skipped (cap=%d)",
+        len(scheduled), len(skipped), _PIPELINE_MAX_CONCURRENT,
+    )
+    return {
+        "mode":        "force-full-batch",
+        "scheduled":   len(scheduled),
+        "session_ids": scheduled,
+        "skipped":     skipped,
+        "concurrency": _PIPELINE_MAX_CONCURRENT,
+    }
 
 
 # ─── API: Admin — Diagnose a session (why is it stuck?) ──────────────────────
@@ -730,6 +801,10 @@ async def start_session(candidate: CandidateInfo):
 # ─── v2.4 SCORING / READINESS HELPERS ────────────────────────────────────────
 ENGLISH_WEIGHT = 0.15  # 15% of every question is allocated to English proficiency
 
+# v2.5: a 10 implies unattainable perfection; the engine never awards it.
+# Per-question scores are clamped to this ceiling everywhere.
+SCORE_CEILING = int(os.environ.get("SCORE_CEILING", "9"))
+
 def _adjust_for_english(base_total: int | float, english_factor: float | None) -> float:
     """Apply the 15% English-proficiency multiplier to a base content score.
 
@@ -740,71 +815,100 @@ def _adjust_for_english(base_total: int | float, english_factor: float | None) -
     no adjustment, i.e. the base score is used unchanged. This keeps old
     reports backward-compatible.
 
-    Returns a float rounded to 1 decimal, capped at 10.0.
+    v2.5: base is first clamped to the 9 ceiling, and the result is capped at
+    SCORE_CEILING (9). Returns a float rounded to 1 decimal.
     """
     try:
         ef = float(english_factor) if english_factor is not None else 1.0
     except (TypeError, ValueError):
         ef = 1.0
     ef = max(0.0, min(1.0, ef))  # clamp
+    base = max(0.0, min(float(SCORE_CEILING), float(base_total)))  # clamp base to 9 ceiling
     multiplier = (1.0 - ENGLISH_WEIGHT) + ENGLISH_WEIGHT * ef
-    adjusted = round(float(base_total) * multiplier, 1)
-    return min(10.0, max(0.0, adjusted))
+    adjusted = round(base * multiplier, 1)
+    return min(float(SCORE_CEILING), max(0.0, adjusted))
 
 
-def _compute_readiness_tier(normalized: float, competency_summary: dict) -> dict:
-    """5-tier readiness with per-competency floor demotion.
+# v2.5 readiness tiers expressed on the 0-300 total. (name, min_total, comp_floor)
+# Top gate is >250 per user requirement — with the 9-ceiling (max 270) this is
+# genuinely exceptional and rare. Walk top-down; first tier whose BOTH total-band
+# and per-competency floor are satisfied is the candidate's tier.
+READINESS_TIERS = [
+    ("Ready for Higher Responsibility", 251, 6.5),   # > 250
+    ("Ready to be Plant Manager",       210, 6.0),   # 210 - 250
+    ("Ready with Structured Support",   150, 5.0),   # 150 - <210
+    ("Not Yet Ready",                    90, 0.0),   # 90 - <150 (no floor)
+    ("Low Potential",                     0, 0.0),   # < 90 (catch-all)
+]
 
-    Returns a dict: {tier, reason, weakest_competency, weakest_score}
-    so the report can explain WHY a high-total candidate landed in a
-    lower tier (e.g., "demoted because Vendor Mgmt = 6.0 < 6.5 floor").
+def _compute_readiness_tier(total_300: float, competency_summary: dict,
+                             integrity_override: bool = False,
+                             integrity_reason: str = "") -> dict:
+    """5-tier readiness on the 0-300 total with per-competency floor demotion.
+
+    Returns {tier, reason, weakest_competency, weakest_score, demoted_from}
+    so the report can explain WHY a high-total candidate landed lower.
+
+    integrity_override: when True (a SEVERE integrity red flag was raised in
+    MODE 2), readiness is capped at "Ready with Structured Support" regardless
+    of total. High bar — driven by explicit red-flag evidence, not a low number.
     """
     if not competency_summary:
         return {"tier": "Low Potential", "reason": "no competency data",
-                "weakest_competency": None, "weakest_score": None}
+                "weakest_competency": None, "weakest_score": None, "demoted_from": None}
 
     weakest_comp = min(competency_summary, key=lambda k: competency_summary[k])
     weakest_score = competency_summary[weakest_comp]
 
-    # Walk top-down. First tier where BOTH score band AND competency floor
-    # are satisfied is the candidate's tier.
-    tiers = [
-        ("Ready for Higher Responsibility", 80, 6.5),
-        ("Ready to be Plant Manager",       70, 6.0),
-        ("Ready with Structured Support",   50, 5.0),
-        ("Not Yet Ready",                   30, 0.0),  # no competency floor
-        ("Low Potential",                    0, 0.0),  # catch-all
-    ]
-    for tier_name, score_min, comp_floor in tiers:
-        if normalized >= score_min and weakest_score >= comp_floor:
-            # Determine if this is a demotion (score qualifies for higher tier
-            # but competency floor knocked them down)
+    chosen = None
+    for tier_name, total_min, comp_floor in READINESS_TIERS:
+        if total_300 >= total_min and weakest_score >= comp_floor:
             demoted_from = None
-            for higher_tier, hs_min, hcomp_floor in tiers:
+            for higher_tier, h_min, h_floor in READINESS_TIERS:
                 if higher_tier == tier_name:
                     break
-                if normalized >= hs_min and weakest_score < hcomp_floor:
+                if total_300 >= h_min and weakest_score < h_floor:
                     demoted_from = higher_tier
+                    demoted_floor = h_floor
                     break
             reason = (
-                f"score {normalized:.1f}% qualifies for '{demoted_from}', "
-                f"but {weakest_comp} ({weakest_score:.1f}) is below that "
-                f"tier's {hcomp_floor} competency floor"
+                f"total {total_300:.0f}/300 qualifies for '{demoted_from}', but "
+                f"{weakest_comp} ({weakest_score:.1f}) is below that tier's "
+                f"{demoted_floor} competency floor"
             ) if demoted_from else (
-                f"score {normalized:.1f}% and weakest competency "
+                f"total {total_300:.0f}/300 and weakest competency "
                 f"{weakest_comp} ({weakest_score:.1f}) qualify for this tier"
             )
-            return {
+            chosen = {
                 "tier": tier_name,
                 "reason": reason,
                 "weakest_competency": weakest_comp,
                 "weakest_score": weakest_score,
                 "demoted_from": demoted_from,
             }
+            break
 
-    # Should never reach here given the catch-all but for safety:
-    return {"tier": "Low Potential", "reason": "fell through tier checks",
-            "weakest_competency": weakest_comp, "weakest_score": weakest_score}
+    if chosen is None:  # safety
+        chosen = {"tier": "Low Potential", "reason": "fell through tier checks",
+                  "weakest_competency": weakest_comp, "weakest_score": weakest_score,
+                  "demoted_from": None}
+
+    # ── Integrity override: cap at "Ready with Structured Support" or below ──
+    if integrity_override:
+        cap_rank = {"Low Potential": 0, "Not Yet Ready": 1,
+                    "Ready with Structured Support": 2,
+                    "Ready to be Plant Manager": 3,
+                    "Ready for Higher Responsibility": 4}
+        if cap_rank.get(chosen["tier"], 4) > cap_rank["Ready with Structured Support"]:
+            original = chosen["tier"]
+            chosen["tier"] = "Ready with Structured Support"
+            chosen["demoted_from"] = original
+            chosen["reason"] = (
+                f"INTEGRITY OVERRIDE — would have been '{original}' on score, but a "
+                f"severe integrity concern caps readiness here pending manager review"
+                + (f": {integrity_reason}" if integrity_reason else "")
+            )
+    return chosen
 
 
 # ─── BACKGROUND TASK: Process entire assessment asynchronously ───────────────
@@ -964,14 +1068,87 @@ async def process_assessment_async(session_id: str) -> None:
             ENGLISH_WEIGHT * 100,
         )
 
-        # ── 5-tier readiness with competency floor (v2.4 deterministic) ──────
-        readiness_info = _compute_readiness_tier(normalized_score, python_competency_summary)
-        logger.info(
-            "Readiness tier for %s: '%s' — %s",
-            session_id, readiness_info["tier"], readiness_info["reason"],
-        )
+        # ── Step 2c: DOUBLE-PASS REVIEW for extreme totals (v2.5) ────────────
+        # Extreme totals are statistically suspect. Re-examine and gently
+        # correct toward defensible scores to reduce AI-vs-human variation.
+        #   < REVIEW_LOW_THRESHOLD  → lenient (raise under-credited lows)
+        #   > REVIEW_HIGH_THRESHOLD → strict  (trim evidence-thin highs)
+        # The review operates on BASE content scores; the app re-applies the
+        # English factor afterward. Failures are swallowed (review returns {}),
+        # so the pipeline always proceeds with at least the first-pass scores.
+        review_direction = None
+        if overall_score < REVIEW_LOW_THRESHOLD:
+            review_direction = "lenient"
+        elif overall_score > REVIEW_HIGH_THRESHOLD:
+            review_direction = "strict"
+
+        if review_direction:
+            # Only send ANSWERED items (skip genuinely empty transcripts)
+            review_items = [
+                {
+                    "srt_id":        q["srt_id"],
+                    "competency":    r["competency"],
+                    "situation":     r["situation"],
+                    "transcript":    r["transcript"],
+                    "current_score": r.get("base_score", r["score"]),
+                }
+                for q, r in zip(questions, results)
+                if (r.get("transcript") or "").strip()
+            ]
+            logger.info(
+                "Double-pass review TRIGGERED for %s: total=%.1f/300 direction=%s items=%d",
+                session_id, overall_score, review_direction, len(review_items),
+            )
+            try:
+                revisions = await asyncio.to_thread(
+                    review_pass,
+                    client=client,
+                    items=review_items,
+                    preliminary_total=overall_score,
+                    direction=review_direction,
+                )
+            except Exception as exc:
+                logger.error("Double-pass review errored (%s) — keeping first-pass scores", exc)
+                revisions = {}
+
+            if revisions:
+                # Apply revised BASE scores → re-adjust for English → update
+                # both `results` and the persisted `scores` dict. results has
+                # no srt_id field, so we walk questions and results in lockstep.
+                for q, r in zip(questions, results):
+                    sid = q["srt_id"]
+                    if sid in revisions:
+                        new_base = int(revisions[sid])
+                        ef = r.get("english_proficiency", 1.0)
+                        new_adj = _adjust_for_english(new_base, ef)
+                        r["base_score"] = new_base
+                        r["score"]      = new_adj
+                        if sid in scores:
+                            scores[sid]["base_score"] = new_base
+                            scores[sid]["score"]      = new_adj
+                # Persist revised scores and recompute totals
+                session["scores"] = scores
+                update_session(session_id, scores=scores)
+                overall_score = round(sum(float(r["score"]) for r in results), 1)
+                base_overall  = round(sum(float(r.get("base_score", r["score"])) for r in results), 1)
+                normalized_score = round((overall_score / 300) * 100, 1)
+                base_normalized  = round((base_overall  / 300) * 100, 1)
+                comp_buckets = defaultdict(list)
+                for r in results:
+                    comp_buckets[r["competency"]].append(float(r["score"]))
+                python_competency_summary = {
+                    comp: round(sum(sc) / len(sc), 1) for comp, sc in comp_buckets.items()
+                }
+                logger.info(
+                    "Double-pass review applied %d revision(s) for %s → new total %.1f/300 (%.1f%%)",
+                    len(revisions), session_id, overall_score, normalized_score,
+                )
+            else:
+                logger.info("Double-pass review made no changes for %s", session_id)
 
         # ── Step 3: Generate final report ────────────────────────────────────
+        # (Readiness tier is computed AFTER the report so the integrity
+        #  red-flag signal from MODE 2 can feed the integrity override.)
         candidate = session["candidate"]
         try:
             report_data = await asyncio.to_thread(
@@ -993,10 +1170,26 @@ async def process_assessment_async(session_id: str) -> None:
             report_data["base_normalized_out_of_100"]  = base_normalized
             report_data["english_weight_pct"]          = ENGLISH_WEIGHT * 100
 
-            # ── 5-tier deterministic readiness override ──────────────────────
-            # The skill prompt asks Claude to use these tier names too, but
-            # the app is the single source of truth. Tier is computed from
-            # (normalized_score, weakest competency average) per v2.4 rules.
+            # ── 5-tier deterministic readiness (computed in app) ─────────────
+            # The skill prompt asks Claude to use these tier names too, but the
+            # app is the single source of truth. Tier is computed from the
+            # 0-300 total + weakest competency floor (v2.5), with an integrity
+            # override driven by an EXPLICIT severe red flag in MODE 2 output.
+            irf = report_data.get("integrity_red_flag") or {}
+            integrity_override = bool(irf.get("present"))
+            integrity_reason   = str(irf.get("evidence", ""))[:200] if integrity_override else ""
+
+            readiness_info = _compute_readiness_tier(
+                overall_score, python_competency_summary,
+                integrity_override=integrity_override,
+                integrity_reason=integrity_reason,
+            )
+            logger.info(
+                "Readiness tier for %s: '%s' — %s%s",
+                session_id, readiness_info["tier"], readiness_info["reason"],
+                " [INTEGRITY OVERRIDE]" if integrity_override else "",
+            )
+
             claude_readiness = (report_data.get("overall_readiness") or "").strip()
             report_data["overall_readiness"]      = readiness_info["tier"]
             report_data["readiness_explanation"]  = readiness_info["reason"]

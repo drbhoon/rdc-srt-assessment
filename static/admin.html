@@ -4,8 +4,8 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Admin Panel – RDC SRT Assessment</title>
-  <!-- v4.21 — UTC timezone fix on timestamps (was: IST showed +5.5h inflated, e.g. "330m stuck" when actual was 2m) -->
-  <link rel="stylesheet" href="/static/style.css?v=4.21"/>
+  <!-- v4.22 — skill v2.5: 9-cap, double-pass extreme-total review, per-competency recognition, top tier gated >250, integrity override, re-baseline batch -->
+  <link rel="stylesheet" href="/static/style.css?v=4.22"/>
   <style>
     body { background: #f0f3f8; }
 
@@ -270,7 +270,7 @@
     <div>
       <h1>
         RDC – Plant Incharge Situation Based Competency Assessment Engine
-        <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.21</span>
+        <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.22</span>
       </h1>
       <div class="sub">Admin Panel | Confidential – Head Office Use Only</div>
     </div>
@@ -290,6 +290,7 @@
     <button class="btn btn-outline btn-sm" onclick="openAccessCodeModal()" title="Generate a 10-digit access code HR can share with up to 10 candidates">+ New Assessment</button>
     <button class="btn btn-primary btn-sm" onclick="openQuickTest()" title="Run a full pipeline test without answering 30 questions">🧪 Quick Test</button>
     <button class="btn-rescore-bulk" onclick="rescoreAllStuck()" title="Rescue every session that has all 30 answers but is stuck 'In Progress'. Uses stored transcripts — no candidate involvement. Processes 2 at a time.">🚑 Rescore All Stuck</button>
+    <button class="btn-rescore-bulk" style="background:#8e44ad;" onclick="rescoreValidationBatch()" title="RE-BASELINE: force-full rescore ALL completed sessions under the current skill (v2.5). Wipes prior scores so every question is re-scored fresh. ~30 calls/candidate — slow and uses API quota. Use after a skill calibration change.">⟳⟳ Re-baseline All</button>
   </div>
 
   <div class="table-wrap">
@@ -960,6 +961,41 @@ async function rescoreAllStuck() {
     await loadSessions();
   } catch (e) {
     alert('Bulk rescore failed: ' + e.message);
+  }
+}
+
+// ─── Re-baseline: FORCE-FULL rescore all completed sessions under v2.5 ────────
+async function rescoreValidationBatch() {
+  const completed = allSessions.filter(s => s.status === 'completed');
+  if (!completed.length) {
+    alert('No completed sessions to re-baseline.');
+    return;
+  }
+  if (!confirm(
+    `⟳⟳ RE-BASELINE ${completed.length} completed session(s) under the current skill (v2.5)?\n\n` +
+    `⚠ This WIPES all prior scores and re-scores EVERY question fresh — needed so the\n` +
+    `v2.5 changes (9-cap, double-pass review, per-competency rules) apply to all answers.\n\n` +
+    `Cost: ~30 Sonnet calls per candidate (≈ ${completed.length * 30} calls total).\n` +
+    `At 2 concurrent + caching, expect roughly 1–2 hours for ~100 candidates.\n\n` +
+    `Proceed?`
+  )) return;
+  // Second confirm — this is expensive and destructive of prior scores
+  if (!confirm(`Confirm again: force-full re-baseline ${completed.length} sessions? Prior scores will be overwritten.`)) return;
+
+  try {
+    const res = await fetch('/api/admin/rescore-validation-batch', {
+      method:  'POST',
+      headers: { 'X-Admin-Token': adminToken, 'Content-Type': 'application/json' },
+      body:    JSON.stringify({}),   // empty body = all sessions with answers
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
+    const d = await res.json();
+    alert(`✅ Re-baseline started: ${d.scheduled} session(s) queued (mode: ${d.mode}, concurrency ${d.concurrency}).\n\n` +
+          `Skipped: ${(d.skipped||[]).length}. This runs in the background — click Refresh periodically. ` +
+          `When done, run Validation data/revalidation_analysis.py to measure the new AI-vs-BH gap.`);
+    await loadSessions();
+  } catch (e) {
+    alert('Re-baseline failed: ' + e.message);
   }
 }
 

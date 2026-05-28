@@ -19,6 +19,17 @@ SCORER_MAX_TOKENS  = 2048        # was 1024 — bumped to prevent JSON truncatio
 # var ANTHROPIC_SCORER_MODEL if Anthropic retires the current default too.
 SCORER_MODEL = os.getenv("ANTHROPIC_SCORER_MODEL", "claude-haiku-4-5")
 
+# ── v2.5 score ceiling ───────────────────────────────────────────────────────
+# A 10 implies unattainable perfection; the engine never awards it. Per-question
+# scores are clamped to this ceiling everywhere (first pass and review pass).
+SCORE_CEILING = int(os.getenv("SCORE_CEILING", "9"))
+
+# ── v2.5 double-pass review thresholds (on the 0-300 preliminary total) ───────
+# Extreme totals are statistically suspect; the review pass re-examines them.
+REVIEW_LOW_THRESHOLD   = int(os.getenv("REVIEW_LOW_THRESHOLD", "100"))   # < this → lenient review
+REVIEW_HIGH_THRESHOLD  = int(os.getenv("REVIEW_HIGH_THRESHOLD", "250"))  # > this → strict review
+REVIEW_MAX_TOKENS      = int(os.getenv("REVIEW_MAX_TOKENS", "3000"))
+
 
 def get_system_prompt() -> str:
     skill_path = Path(__file__).parent / "skill" / "RDC-Plant-Incharge-SRT-Assessment.md"
@@ -255,3 +266,122 @@ def score_question(
         "strengths": [],
         "improvements": [f"Scoring error after {final_attempt} attempt(s) [{err_label}]: {err_text}"],
     }
+
+
+# ─── v2.5 Double-pass review ──────────────────────────────────────────────────
+def review_pass(
+    client: anthropic.Anthropic,
+    items: list,
+    preliminary_total: float,
+    direction: str,
+) -> dict:
+    """MODE 1.5 double-pass review for extreme totals.
+
+    `items` is a list of dicts: {srt_id, competency, situation, transcript, current_score}.
+    `direction` is "lenient" (total very low → only raise) or "strict" (total very
+    high → only lower). Returns {"<srt_id>": new_score, ...} for CHANGED scores only.
+
+    Single batched, prompt-cached Sonnet call. On ANY failure returns {} (no
+    revisions) so the pipeline proceeds with the original first-pass scores —
+    the review is a refinement, never a hard dependency.
+    """
+    if direction not in ("lenient", "strict") or not items:
+        return {}
+
+    system_prompt = get_system_prompt()
+    payload = {
+        "mode": "review_pass",
+        "direction": direction,
+        "preliminary_total": round(float(preliminary_total), 1),
+        "items": [
+            {
+                "srt_id":        it.get("srt_id"),
+                "competency":    it.get("competency"),
+                "situation":     it.get("situation"),
+                "transcript":    it.get("transcript", ""),
+                "current_score": it.get("current_score"),
+            }
+            for it in items
+        ],
+    }
+
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            message = client.messages.create(
+                model=SCORER_MODEL,
+                max_tokens=REVIEW_MAX_TOKENS,
+                system=[{"type": "text", "text": system_prompt,
+                         "cache_control": {"type": "ephemeral"}}],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": (
+                            "Run the MODE 1.5 review_pass. Respond with ONLY the JSON object "
+                            "described in the skill (direction + revisions array). No prose, "
+                            "no markdown fences. Start with '{' and end with '}'.\n\n"
+                            + json.dumps(payload, indent=2, ensure_ascii=False)
+                        ),
+                    },
+                    {"role": "assistant", "content": "{"},
+                ],
+            )
+            if getattr(message, "stop_reason", None) == "max_tokens":
+                raise TruncatedResponseError("review_pass truncated at max_tokens")
+
+            response_text = "{" + message.content[0].text.strip()
+            parsed = json.loads(_extract_json(response_text))
+            revisions = parsed.get("revisions", []) or []
+
+            # Build a directionally-validated map of srt_id -> new_score.
+            current = {it.get("srt_id"): it.get("current_score") for it in items}
+            out = {}
+            for rev in revisions:
+                sid = rev.get("srt_id")
+                if sid not in current:
+                    continue
+                try:
+                    new = int(round(float(rev.get("new_score"))))
+                except (TypeError, ValueError):
+                    continue
+                old = current.get(sid)
+                old = int(round(float(old))) if old is not None else None
+                # Clamp to ceiling and enforce direction (defensive — never trust the model blindly)
+                new = max(0, min(SCORE_CEILING, new))
+                if old is not None:
+                    if direction == "lenient" and new < old:
+                        continue   # lenient may only raise
+                    if direction == "strict" and new > old:
+                        continue   # strict may only lower
+                    if new == old:
+                        continue   # no-op
+                out[sid] = new
+                logger.info(
+                    "review_pass(%s) %s: %s -> %s (%s)",
+                    direction, sid, old, new, str(rev.get("reason", ""))[:80],
+                )
+            logger.info("review_pass(%s) applied %d revision(s)", direction, len(out))
+            return out
+
+        except anthropic.BadRequestError as exc:
+            logger.error("review_pass 400 BadRequestError — skipping review: %s", str(exc)[:300])
+            return {}
+        except (anthropic.APIError, anthropic.APIStatusError, anthropic.APIConnectionError,
+                anthropic.RateLimitError, TruncatedResponseError, json.JSONDecodeError) as exc:
+            if attempt < MAX_ATTEMPTS:
+                delay = BACKOFF_SECONDS[attempt - 1] if attempt - 1 < len(BACKOFF_SECONDS) else 4
+                logger.warning(
+                    "review_pass attempt %d/%d failed (%s) — retrying in %ds",
+                    attempt, MAX_ATTEMPTS, type(exc).__name__, delay,
+                )
+                time.sleep(delay)
+            else:
+                logger.error(
+                    "review_pass FINAL failure (%s: %s) — proceeding with original scores",
+                    type(exc).__name__, str(exc)[:200],
+                )
+                return {}
+        except Exception as exc:
+            logger.error("review_pass unexpected error (%s) — skipping review", str(exc)[:200], exc_info=True)
+            return {}
+
+    return {}
