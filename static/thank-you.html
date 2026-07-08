@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Assessment Submitted – RDC</title>
-  <link rel="stylesheet" href="/static/style.css"/>
+  <link rel="stylesheet" href="/static/style.css?v=4.23"/>
   <style>
     body { background: var(--blue-light); }
     .ty-wrap {
@@ -18,10 +18,11 @@
       text-align: center;
     }
     .ty-logo {
-      font-size: 13px; font-weight: 800; letter-spacing: 4px;
-      color: var(--blue); background: var(--blue-light);
-      padding: 6px 18px; border-radius: 20px;
-      display: inline-block; margin-bottom: 28px;
+      display: inline-flex; align-items: center; justify-content: center;
+      height: 60px; padding: 4px 12px; margin-bottom: 22px;
+      background: #fff; border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+      font-size: 13px; font-weight: 800; letter-spacing: 4px; color: var(--blue);
     }
     .ty-checkmark {
       width: 80px; height: 80px; border-radius: 50%;
@@ -72,7 +73,9 @@
 <body>
 <div class="ty-wrap">
   <div class="ty-card">
-    <div class="ty-logo">RDC CONCRETE</div>
+    <div class="ty-logo">
+      <img src="/static/rdc-logo.png?v=1" alt="RDC" style="max-height:56px;max-width:160px;object-fit:contain;display:block;" onerror="this.remove();this.parentNode.textContent='RDC CONCRETE';" />
+    </div>
     <div class="ty-checkmark">✓</div>
     <div class="ty-title">Assessment Submitted Successfully</div>
 
@@ -95,7 +98,7 @@
     </button>
 
     <div class="ty-footer">
-      RDC Plant Incharge – Situation Based Competency Assessment Engine &nbsp;|&nbsp; Confidential
+      RDC Plant Incharge – Situation Based Competency Assessment Engine (PLANT-PRO) &nbsp;|&nbsp; Confidential
     </div>
   </div>
 </div>

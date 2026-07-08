@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Admin Panel – RDC SRT Assessment</title>
   <!-- v4.22 — skill v2.5: 9-cap, double-pass extreme-total review, per-competency recognition, top tier gated >250, integrity override, re-baseline batch -->
-  <link rel="stylesheet" href="/static/style.css?v=4.22"/>
+  <link rel="stylesheet" href="/static/style.css?v=4.23"/>
   <style>
     body { background: #f0f3f8; }
 
@@ -250,9 +250,11 @@
 <!-- ── LOGIN ───────────────────────────────────────────────────────────────── -->
 <div id="loginWrap" class="login-wrap">
   <div class="login-card">
-    <div class="login-logo">RDC CONCRETE</div>
+    <div class="login-logo" style="display:inline-flex;align-items:center;justify-content:center;height:60px;padding:4px 12px;background:#fff;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.06);">
+      <img src="/static/rdc-logo.png?v=1" alt="RDC" style="max-height:56px;max-width:160px;object-fit:contain;display:block;" onerror="this.remove();this.parentNode.textContent='RDC CONCRETE';this.parentNode.style.padding='6px 18px';" />
+    </div>
     <div class="login-title">Admin Panel</div>
-    <div class="login-sub">SRT Assessment Engine — Authorised Use Only</div>
+    <div class="login-sub">SRT Assessment Engine (PLANT-PRO) — Authorised Use Only</div>
     <div class="form-group">
       <label>Admin Password</label>
       <input type="password" id="pwInput" placeholder="Enter admin password"
@@ -267,12 +269,17 @@
 <div id="dashboard">
 
   <div class="dash-header">
-    <div>
-      <h1>
-        RDC – Plant Incharge Situation Based Competency Assessment Engine
-        <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.22</span>
-      </h1>
-      <div class="sub">Admin Panel | Confidential – Head Office Use Only</div>
+    <div style="display:flex;align-items:center;gap:14px;">
+      <div style="width:110px;height:56px;background:#fff;border-radius:8px;padding:4px 8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <img src="/static/rdc-logo.png?v=1" alt="RDC" style="max-width:100%;max-height:100%;object-fit:contain;display:block;" onerror="this.remove();this.parentNode.style.color='var(--blue)';this.parentNode.style.fontWeight='900';this.parentNode.style.fontSize='20px';this.parentNode.textContent='RDC';" />
+      </div>
+      <div>
+        <h1>
+          RDC – Plant Incharge Situation Based Competency Assessment Engine (PLANT-PRO)
+          <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.22</span>
+        </h1>
+        <div class="sub">Admin Panel | Confidential – Head Office Use Only</div>
+      </div>
     </div>
     <button class="dash-logout" onclick="logout()">Logout</button>
   </div>
