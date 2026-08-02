@@ -190,6 +190,34 @@ async def get_config():
     return {"assessment_minutes": ASSESSMENT_MINUTES}
 
 # ─── API: Admin Login ────────────────────────────────────────────────────────
+# ─── Admin authentication ────────────────────────────────────────────────────
+# On the HR platform nginx has already verified the caller against the HR
+# allowlist and passes their address as X-Auth-Email. That header is blanked on
+# every inbound request and re-set only from the auth_request result, so it
+# cannot be forged by a caller.
+#
+# The password remains valid as a fallback, which keeps Railway and local
+# development working unchanged. Note it doubles as the API token here — the
+# login endpoint hands the password straight back — so SSO is a real
+# improvement, not just convenience.
+REQUIRE_SSO = os.environ.get("REQUIRE_SSO") == "true"
+
+
+def _admin_identity(x_admin_token: str | None, x_auth_email: str | None) -> str | None:
+    """Return who this admin is, or None if the request is not authorised."""
+    if REQUIRE_SSO and x_auth_email:
+        return x_auth_email
+    if x_admin_token and x_admin_token == ADMIN_PASSWORD:
+        return "admin"
+    return None
+
+
+@app.get("/api/admin/me")
+async def admin_me(x_auth_email: str = Header(None)):
+    """Lets the console skip its password prompt when the platform knows us."""
+    return {"email": x_auth_email, "sso": REQUIRE_SSO}
+
+
 @app.post("/api/admin/login")
 async def admin_login(payload: dict):
     if payload.get("password") == ADMIN_PASSWORD:
@@ -208,8 +236,8 @@ def _get(session_id: str) -> dict | None:
 
 # ─── API: Admin — List Sessions ──────────────────────────────────────────────
 @app.get("/api/admin/sessions")
-async def admin_list_sessions(x_admin_token: str = Header(None)):
-    if x_admin_token != ADMIN_PASSWORD:
+async def admin_list_sessions(x_admin_token: str = Header(None), x_auth_email: str = Header(None)):
+    if not _admin_identity(x_admin_token, x_auth_email):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     # v4.20 watchdog: sweep stale 'processing' sessions before returning the
@@ -236,12 +264,12 @@ async def admin_list_sessions(x_admin_token: str = Header(None)):
 # ─── API: Admin — Watchdog (manual trigger) ──────────────────────────────────
 @app.post("/api/admin/watchdog")
 async def admin_watchdog(timeout_minutes: int | None = None,
-                          x_admin_token: str = Header(None)):
+                          x_admin_token: str = Header(None), x_auth_email: str = Header(None)):
     """Manually run the stuck-pipeline watchdog. Returns count of auto-failed
     sessions. The watchdog also runs implicitly on every /api/admin/sessions
     call, so you usually don't need this — but it's available for forced sweeps.
     """
-    if x_admin_token != ADMIN_PASSWORD:
+    if not _admin_identity(x_admin_token, x_auth_email):
         raise HTTPException(status_code=401, detail="Unauthorized")
     minutes = timeout_minutes if timeout_minutes is not None else WATCHDOG_TIMEOUT_MINUTES
     count = auto_fail_stale_processing(timeout_minutes=minutes)
@@ -255,8 +283,8 @@ async def admin_watchdog(timeout_minutes: int | None = None,
 
 # ─── API: Admin — Get Report ─────────────────────────────────────────────────
 @app.get("/api/admin/report/{session_id}")
-async def get_report(session_id: str, x_admin_token: str = Header(None)):
-    if x_admin_token != ADMIN_PASSWORD:
+async def get_report(session_id: str, x_admin_token: str = Header(None), x_auth_email: str = Header(None)):
+    if not _admin_identity(x_admin_token, x_auth_email):
         raise HTTPException(status_code=401, detail="Unauthorized")
     session = _get(session_id)
     if not session:
@@ -268,8 +296,8 @@ async def get_report(session_id: str, x_admin_token: str = Header(None)):
 
 # ─── API: Admin — Delete Session ─────────────────────────────────────────────
 @app.delete("/api/admin/session/{session_id}")
-async def delete_session_endpoint(session_id: str, x_admin_token: str = Header(None)):
-    if x_admin_token != ADMIN_PASSWORD:
+async def delete_session_endpoint(session_id: str, x_admin_token: str = Header(None), x_auth_email: str = Header(None)):
+    if not _admin_identity(x_admin_token, x_auth_email):
         raise HTTPException(status_code=401, detail="Unauthorized")
     _cache.pop(session_id, None)
     if not db_delete_session(session_id):
@@ -281,9 +309,9 @@ async def delete_session_endpoint(session_id: str, x_admin_token: str = Header(N
 async def admin_quick_test(
     payload: dict,
     background_tasks: BackgroundTasks,
-    x_admin_token: str = Header(None),
+    x_admin_token: str = Header(None), x_auth_email: str = Header(None),
 ):
-    if x_admin_token != ADMIN_PASSWORD:
+    if not _admin_identity(x_admin_token, x_auth_email):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     import datetime
@@ -320,8 +348,8 @@ async def admin_quick_test(
 
 # ─── API: Admin — Force Reset stuck session ──────────────────────────────────
 @app.post("/api/admin/force-reset/{session_id}")
-async def force_reset_endpoint(session_id: str, x_admin_token: str = Header(None)):
-    if x_admin_token != ADMIN_PASSWORD:
+async def force_reset_endpoint(session_id: str, x_admin_token: str = Header(None), x_auth_email: str = Header(None)):
+    if not _admin_identity(x_admin_token, x_auth_email):
         raise HTTPException(status_code=401, detail="Unauthorized")
     session = _get(session_id)
     if not session:
@@ -338,7 +366,7 @@ async def rescore_session(
     session_id: str,
     background_tasks: BackgroundTasks,
     force_full: bool = False,
-    x_admin_token: str = Header(None),
+    x_admin_token: str = Header(None), x_auth_email: str = Header(None),
 ):
     """Re-run scoring + report + PDF against transcripts already in collected_answers.
     No candidate involvement needed — answers are loaded from Postgres.
@@ -350,7 +378,7 @@ async def rescore_session(
         Use when the skill prompt has changed and you want the new
         calibration applied to every question (not just the failed ones).
     """
-    if x_admin_token != ADMIN_PASSWORD:
+    if not _admin_identity(x_admin_token, x_auth_email):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     session = _get(session_id)
@@ -454,13 +482,13 @@ async def rescore_session(
 @app.post("/api/admin/rescore-stuck")
 async def rescore_stuck_sessions(
     background_tasks: BackgroundTasks,
-    x_admin_token: str = Header(None),
+    x_admin_token: str = Header(None), x_auth_email: str = Header(None),
 ):
     """Rescue path for a batch that got stuck in 'In Progress' state despite
     having all 30 answers in the database. Schedules a rescore for each
     eligible session — the pipeline semaphore serializes them cleanly.
     """
-    if x_admin_token != ADMIN_PASSWORD:
+    if not _admin_identity(x_admin_token, x_auth_email):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     summary = list_sessions()
@@ -537,7 +565,7 @@ async def rescore_stuck_sessions(
 async def rescore_validation_batch(
     background_tasks: BackgroundTasks,
     payload: ValidationBatchRequest | None = None,
-    x_admin_token: str = Header(None),
+    x_admin_token: str = Header(None), x_auth_email: str = Header(None),
 ):
     """Force-full rescore a set of sessions to RE-BASELINE them under the
     current skill version (v2.5). Unlike smart-resume, this WIPES all prior
@@ -554,7 +582,7 @@ async def rescore_validation_batch(
     Cost note: ~30 Sonnet calls per candidate (~$0.43 each). 36 candidates
     ≈ $15.5; 102 ≈ $44. With caching + cap=2 expect ~20-40 min for 36.
     """
-    if x_admin_token != ADMIN_PASSWORD:
+    if not _admin_identity(x_admin_token, x_auth_email):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     payload = payload or ValidationBatchRequest()
@@ -625,13 +653,13 @@ async def rescore_validation_batch(
 
 # ─── API: Admin — Diagnose a session (why is it stuck?) ──────────────────────
 @app.get("/api/admin/diagnose/{session_id}")
-async def diagnose_session(session_id: str, x_admin_token: str = Header(None)):
+async def diagnose_session(session_id: str, x_admin_token: str = Header(None), x_auth_email: str = Header(None)):
     """Return granular session state so admin can see WHY a session isn't
     flipping to 'completed'. Use this when a session is stuck 'In Progress'
     and you want to know: is it genuinely processing? Did scoring complete?
     Did report gen fail? Is the error field populated?
     """
-    if x_admin_token != ADMIN_PASSWORD:
+    if not _admin_identity(x_admin_token, x_auth_email):
         raise HTTPException(status_code=401, detail="Unauthorized")
     session = _get(session_id)
     if not session:
@@ -706,7 +734,7 @@ async def diagnose_session(session_id: str, x_admin_token: str = Header(None)):
 
 # ─── API: Admin — Force Reset a stuck 'processing' session ───────────────────
 @app.post("/api/admin/force-reset-processing/{session_id}")
-async def force_reset_processing(session_id: str, x_admin_token: str = Header(None)):
+async def force_reset_processing(session_id: str, x_admin_token: str = Header(None), x_auth_email: str = Header(None)):
     """Clear the 'processing' lock on a stuck session WITHOUT wiping transcripts.
     Use this ONLY if a session is stuck in 'processing' status (container was
     killed, task never finished) and you want to flip it to 'failed' so the
@@ -718,7 +746,7 @@ async def force_reset_processing(session_id: str, x_admin_token: str = Header(No
     error — earlier versions bulldozed real failure reasons on every admin
     click, destroying diagnostic information the next time Diagnose was run.
     """
-    if x_admin_token != ADMIN_PASSWORD:
+    if not _admin_identity(x_admin_token, x_auth_email):
         raise HTTPException(status_code=401, detail="Unauthorized")
     session = _get(session_id)
     if not session:
@@ -760,10 +788,10 @@ def _fresh_access_code(max_tries: int = 6) -> str:
 @app.post("/api/admin/generate-code")
 async def admin_generate_code(
     payload: AccessCodeGenerate,
-    x_admin_token: str = Header(None),
+    x_admin_token: str = Header(None), x_auth_email: str = Header(None),
 ):
     """Generate a fresh 10-digit access code (max 10 uses by default)."""
-    if x_admin_token != ADMIN_PASSWORD:
+    if not _admin_identity(x_admin_token, x_auth_email):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     max_uses = int(payload.max_uses or 10)
@@ -778,15 +806,15 @@ async def admin_generate_code(
 
 
 @app.get("/api/admin/access-codes")
-async def admin_list_codes(x_admin_token: str = Header(None)):
-    if x_admin_token != ADMIN_PASSWORD:
+async def admin_list_codes(x_admin_token: str = Header(None), x_auth_email: str = Header(None)):
+    if not _admin_identity(x_admin_token, x_auth_email):
         raise HTTPException(status_code=401, detail="Unauthorized")
     return list_access_codes()
 
 
 @app.delete("/api/admin/access-code/{code}")
-async def admin_delete_code(code: str, x_admin_token: str = Header(None)):
-    if x_admin_token != ADMIN_PASSWORD:
+async def admin_delete_code(code: str, x_admin_token: str = Header(None), x_auth_email: str = Header(None)):
+    if not _admin_identity(x_admin_token, x_auth_email):
         raise HTTPException(status_code=401, detail="Unauthorized")
     if not delete_access_code(code):
         raise HTTPException(status_code=404, detail="Code not found")
@@ -1357,8 +1385,8 @@ async def submission_status(session_id: str):
 
 # ─── API: Download PDF ──────────────────────────────────────────────────────
 @app.get("/api/download-pdf/{session_id}")
-async def download_pdf(session_id: str, x_admin_token: str = Header(None)):
-    if x_admin_token != ADMIN_PASSWORD:
+async def download_pdf(session_id: str, x_admin_token: str = Header(None), x_auth_email: str = Header(None)):
+    if not _admin_identity(x_admin_token, x_auth_email):
         raise HTTPException(status_code=401, detail="Unauthorized — admin only")
     session = _get(session_id)
     if not session:

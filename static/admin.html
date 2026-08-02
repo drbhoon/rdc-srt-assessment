@@ -281,6 +281,7 @@
         <div class="sub">Admin Panel | Confidential – Head Office Use Only</div>
       </div>
     </div>
+    <span id="hrIdentity" style="display:none;margin-right:12px;font-size:13px;opacity:.75;"></span>
     <button class="dash-logout" onclick="logout()">Logout</button>
   </div>
 
@@ -476,15 +477,36 @@ async function doLogin() {
   }
 }
 
+// Set when the HR platform has already identified us; null on Railway/local.
+let hrEmail = null;
+
 function logout() {
+  // Signed in through the HR portal: clearing local state achieves nothing,
+  // since the next load is recognised again. End the shared session instead.
+  if (hrEmail) { window.location.href = '/api/auth/logout'; return; }
   adminToken = '';
   localStorage.removeItem('rdc_admin_token');
   document.getElementById('dashboard').style.display = 'none';
   document.getElementById('loginWrap').style.display = 'flex';
 }
 
-// Auto-login if token stored
-window.onload = () => {
+// On the HR platform nginx has already checked us against the HR allowlist, so
+// asking for the password again is pointless. Ask who we are; fall back to the
+// stored token, then to the login screen.
+window.onload = async () => {
+  try {
+    const res = await fetch('/api/admin/me');
+    if (res.ok) {
+      const d = await res.json();
+      if (d.email) {
+        hrEmail = d.email;
+        const badge = document.getElementById('hrIdentity');
+        if (badge) { badge.textContent = d.email; badge.style.display = 'inline'; }
+        showDashboard();
+        return;
+      }
+    }
+  } catch (e) { /* fall through */ }
   const t = localStorage.getItem('rdc_admin_token');
   if (t) { adminToken = t; showDashboard(); }
 };
