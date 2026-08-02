@@ -1,0 +1,6 @@
+# The repo is developed on Windows but built and run on Linux. CRLF in the
+# Dockerfile or in shell snippets breaks the build, so normalise to LF.
+* text=auto eol=lf
+*.xlsx binary
+*.pdf binary
+*.png binary

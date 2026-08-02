@@ -249,7 +249,7 @@ const questions = JSON.parse(sessionStorage.getItem('rdc_questions') || '[]');
 const candidate = JSON.parse(sessionStorage.getItem('rdc_candidate') || '{}');
 let   answers   = JSON.parse(sessionStorage.getItem('rdc_answers')   || '{}');
 
-if (!sessionId || !questions.length) { window.location.href = '/'; }
+if (!sessionId || !questions.length) { window.location.href = (window.BASE_PATH || '') + '/'; }
 
 document.getElementById('candidateHeader').textContent =
   `${candidate.candidate_name || ''} | ${candidate.plant_location || ''}`;
@@ -738,7 +738,7 @@ async function pollUntilDone(total, progressText, scoringBar) {
       if (status === 'completed') {
         scoringBar.style.width   = '100%';
         progressText.textContent = 'Complete! Redirecting…';
-        setTimeout(() => { window.location.href = '/thank-you'; }, 600);
+        setTimeout(() => { window.location.href = (window.BASE_PATH || '') + '/thank-you'; }, 600);
         return;
       }
 

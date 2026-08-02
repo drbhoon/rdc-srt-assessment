@@ -1072,7 +1072,7 @@ async function generateAccessCode() {
       `${d.max_uses - d.used_count} of ${d.max_uses} slots available` +
       (d.label ? ` · ${d.label}` : '');
     // Common assessment URL — NEVER includes the code (anti-cheating requirement).
-    const shareUrl = `${window.location.origin}/`;
+    const shareUrl = `${window.location.origin}${window.BASE_PATH || ''}/`;
     document.getElementById('ac-share-url').textContent = shareUrl;
     document.getElementById('ac-new-code-wrap').style.display = 'block';
 

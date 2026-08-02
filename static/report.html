@@ -129,7 +129,7 @@
         ⬇️ Download PDF Report
       </a>
       &nbsp;
-      <a href="/" class="btn btn-outline">Start New Assessment</a>
+      <a id="newAssessmentBtn" href="/" class="btn btn-outline">Start New Assessment</a>
     </div>
 
   </div><!-- end reportContent -->
@@ -141,8 +141,10 @@ const candidate = JSON.parse(sessionStorage.getItem('rdc_candidate') || '{}');
 const report    = JSON.parse(sessionStorage.getItem('rdc_report')    || 'null');
 
 if (!report) {
-  window.location.href = '/';
+  window.location.href = (window.BASE_PATH || '') + '/';
 }
+
+document.getElementById('newAssessmentBtn').href = (window.BASE_PATH || '') + '/';
 
 function readinessClass(text) {
   const t = (text || '').toLowerCase();
@@ -242,7 +244,7 @@ function renderReport() {
   });
 
   // PDF Download link
-  document.getElementById('pdfDownloadBtn').href = `/api/download-pdf/${sessionId}`;
+  document.getElementById('pdfDownloadBtn').href = `${window.BASE_PATH || ''}/api/download-pdf/${sessionId}`;
 }
 
 renderReport();

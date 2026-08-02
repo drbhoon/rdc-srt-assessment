@@ -10,7 +10,7 @@ from collections import defaultdict
 import anthropic
 from fastapi import FastAPI, HTTPException, Header, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import Response
 
 from models import (
     CandidateInfo, ScoreRequest, FinalReportRequest, SubmitAllRequest,
@@ -48,9 +48,49 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ─── App Setup ───────────────────────────────────────────────────────────────
-app = FastAPI(title="RDC SBCA Engine", version="4.0")
+# On the HR platform (hr.rdcc.ai/srt) nginx strips the prefix before proxying,
+# so the app still sees "/api/...". The browser does not — absolute URLs in the
+# served HTML have to carry the prefix. ROOT_PATH is empty everywhere else
+# (Railway, local), which makes every rewrite below a no-op.
+ROOT_PATH = os.environ.get("ROOT_PATH", "").rstrip("/")
+
+app = FastAPI(title="RDC SBCA Engine", version="4.0", root_path=ROOT_PATH)
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+# Injected at the top of every page. Two jobs: expose the prefix to page
+# scripts as window.BASE_PATH, and prefix root-absolute fetch() targets so the
+# ~20 hardcoded fetch('/api/...') call sites need no edits.
+_BASE_PATH_SHIM = """<script>
+(function () {
+  var B = "%s";
+  window.BASE_PATH = B;
+  if (!B) return;
+  var nativeFetch = window.fetch.bind(window);
+  window.fetch = function (input, init) {
+    if (typeof input === "string" && input.charAt(0) === "/"
+        && input.charAt(1) !== "/" && input.indexOf(B + "/") !== 0) {
+      input = B + input;
+    }
+    return nativeFetch(input, init);
+  };
+})();
+</script>"""
+
+_page_cache: Dict[str, str] = {}
+
+
+def _page(filename: str) -> Response:
+    """Serve one of the static HTML pages with the mount prefix applied."""
+    if filename not in _page_cache:
+        html = (STATIC_DIR / filename).read_text(encoding="utf-8")
+        if ROOT_PATH:
+            # <link>/<img> are fetched by the parser, before any script runs,
+            # so asset URLs must be correct in the markup itself.
+            html = html.replace('="/static/', f'="{ROOT_PATH}/static/')
+        html = html.replace("<head>", "<head>\n" + (_BASE_PATH_SHIM % ROOT_PATH), 1)
+        _page_cache[filename] = html
+    return Response(_page_cache[filename], media_type="text/html")
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 ADMIN_PASSWORD     = os.environ.get("ADMIN_PASSWORD", "rdc@admin2024")
@@ -122,23 +162,23 @@ async def startup():
 # ─── Page Routes ─────────────────────────────────────────────────────────────
 @app.get("/")
 async def index():
-    return FileResponse(str(STATIC_DIR / "index.html"))
+    return _page("index.html")
 
 @app.get("/assessment")
 async def assessment():
-    return FileResponse(str(STATIC_DIR / "assessment.html"))
+    return _page("assessment.html")
 
 @app.get("/thank-you")
 async def thank_you():
-    return FileResponse(str(STATIC_DIR / "thank-you.html"))
+    return _page("thank-you.html")
 
 @app.get("/admin")
 async def admin():
-    return FileResponse(str(STATIC_DIR / "admin.html"))
+    return _page("admin.html")
 
 @app.get("/admin/report")
 async def admin_report():
-    return FileResponse(str(STATIC_DIR / "report.html"))
+    return _page("report.html")
 
 @app.get("/health")
 async def health():
