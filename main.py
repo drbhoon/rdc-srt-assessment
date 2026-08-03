@@ -214,8 +214,13 @@ def _admin_identity(x_admin_token: str | None, x_auth_email: str | None) -> str 
 
 @app.get("/api/admin/me")
 async def admin_me(x_auth_email: str = Header(None)):
-    """Lets the console skip its password prompt when the platform knows us."""
-    return {"email": x_auth_email, "sso": REQUIRE_SSO}
+    """Lets the console skip its password prompt when the platform knows us.
+
+    Only claims an identity when SSO is actually switched on. Reporting the
+    header while REQUIRE_SSO is off would open the dashboard, whose requests
+    then fail the token check and throw the user back to the login screen.
+    """
+    return {"email": x_auth_email if REQUIRE_SSO else None, "sso": REQUIRE_SSO}
 
 
 @app.post("/api/admin/login")
