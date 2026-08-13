@@ -130,23 +130,35 @@
   <div class="card" id="registrationCard">
     <div class="card-title">📋 Candidate Registration</div>
     <div class="alert alert-info">
-      Please fill in accurate details. These will appear on the final assessment report.
+      Enter your employee code and company e-mail. Your name and plant are taken
+      from the employee master, so they appear on the report exactly as HR holds
+      them.
     </div>
     <form id="regForm">
       <div class="form-group">
-        <label>Candidate Full Name *</label>
-        <input type="text" id="candidateName" placeholder="e.g., Rajesh Kumar Sharma" required />
+        <label>Employee Code *</label>
+        <input type="text" id="employeeCode" placeholder="e.g., A00388" required />
       </div>
       <div class="form-group">
-        <label>Plant Location *</label>
-        <input type="text" id="plantLocation" placeholder="e.g., Bangalore – Whitefield Plant" required />
+        <label>Company E-mail *</label>
+        <input type="email" id="employeeEmail" placeholder="e.g., name@rdc.in" required />
       </div>
+
+      <!-- Filled by the lookup. Shown so the candidate can see who the system
+           thinks they are BEFORE a 75-minute assessment is attributed to that
+           person — a mistyped code caught here costs nothing. -->
+      <div class="alert alert-info" id="identityBox" style="display:none;"></div>
+      <div class="code-err" id="identityErr"></div>
+
       <div class="form-group">
         <label>Assessment Date *</label>
         <input type="date" id="assessmentDate" required />
       </div>
       <div style="margin-top:8px;">
-        <button type="submit" class="btn btn-primary" id="startBtn">
+        <button type="button" class="btn btn-primary" id="verifyBtn">
+          <span>Confirm My Details</span>
+        </button>
+        <button type="submit" class="btn btn-primary" id="startBtn" style="display:none;">
           <span>Begin Assessment →</span>
         </button>
       </div>
@@ -201,6 +213,15 @@
     catch (_) { return await res.text(); }
   }
 
+  // Names come from the employee master, so they are not attacker-controlled —
+  // but they are still data being written into innerHTML, and an apostrophe or
+  // an ampersand in a name should render, not break the markup around it.
+  function escHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
   // Step 1: Validate access code
   document.getElementById('codeForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -249,6 +270,66 @@
   });
 
   // Step 2: Begin assessment (sends access code along with registration)
+  // Identity confirmed by the lookup. Cleared whenever the code or e-mail is
+  // edited, so the candidate cannot confirm one person and then start as
+  // another by changing a field afterwards.
+  let verifiedIdentity = null;
+
+  function resetIdentity() {
+    verifiedIdentity = null;
+    document.getElementById('identityBox').style.display = 'none';
+    document.getElementById('identityErr').textContent = '';
+    document.getElementById('startBtn').style.display = 'none';
+    document.getElementById('verifyBtn').style.display = '';
+  }
+  document.getElementById('employeeCode').addEventListener('input', resetIdentity);
+  document.getElementById('employeeEmail').addEventListener('input', resetIdentity);
+
+  document.getElementById('verifyBtn').addEventListener('click', async () => {
+    const btn  = document.getElementById('verifyBtn');
+    const err  = document.getElementById('identityErr');
+    const box  = document.getElementById('identityBox');
+    const code = document.getElementById('employeeCode').value.trim();
+    const mail = document.getElementById('employeeEmail').value.trim();
+
+    err.textContent = '';
+    if (!code || !mail) {
+      err.textContent = 'Please enter both your employee code and your company e-mail.';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span>Checking…</span>';
+    try {
+      // Bare path on purpose — the BASE_PATH shim prefixes it, same as the
+      // other call sites in this app.
+      const res = await fetch('/api/identity/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employee_code: code, email: mail }),
+      });
+      if (!res.ok) throw new Error(await parseErr(res));
+      const who = await res.json();
+
+      verifiedIdentity = who;
+      box.innerHTML =
+        '<strong>' + escHtml(who.full_name || '') + '</strong>'
+        + (who.employee_code ? ' &middot; ' + escHtml(who.employee_code) : '')
+        + (who.designation ? '<br>' + escHtml(who.designation) : '')
+        + (who.location ? '<br>' + escHtml(who.location) : '')
+        + '<br><br>If this is not you, correct your employee code or e-mail above.';
+      box.style.display = '';
+      document.getElementById('startBtn').style.display = '';
+      btn.style.display = 'none';
+    } catch (e2) {
+      err.textContent = e2.message;
+      box.style.display = 'none';
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<span>Confirm My Details</span>';
+    }
+  });
+
   document.getElementById('regForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('startBtn');
@@ -257,13 +338,21 @@
       alert('Please validate your access code first.');
       return;
     }
+    if (!verifiedIdentity) {
+      alert('Please confirm your details first.');
+      return;
+    }
 
     btn.disabled = true;
     btn.innerHTML = '<span>Starting...</span>';
 
+    // Name and plant are sent for display continuity only — the server takes
+    // both from the employee master and ignores what arrives here.
     const payload = {
-      candidate_name:  document.getElementById('candidateName').value.trim(),
-      plant_location:  document.getElementById('plantLocation').value.trim(),
+      employee_code:   document.getElementById('employeeCode').value.trim(),
+      email:           document.getElementById('employeeEmail').value.trim(),
+      candidate_name:  verifiedIdentity.full_name || '',
+      plant_location:  verifiedIdentity.location || '',
       assessment_date: document.getElementById('assessmentDate').value,
       access_code:     validatedCode,
     };
@@ -278,9 +367,12 @@
       if (!res.ok) throw new Error(await parseErr(res));
       const data = await res.json();
 
-      // Store session data (strip code before persisting — not needed downstream)
+      // Store session data (strip code before persisting — not needed
+      // downstream). The e-mail goes too: the server has already recorded it
+      // against the session, and a candidate-facing page has no use for it.
       const candForStore = { ...payload };
       delete candForStore.access_code;
+      delete candForStore.email;
       sessionStorage.setItem('rdc_session_id', data.session_id);
       sessionStorage.setItem('rdc_questions',  JSON.stringify(data.questions));
       sessionStorage.setItem('rdc_candidate',  JSON.stringify(candForStore));

@@ -55,6 +55,36 @@ def init_db():
                 ALTER TABLE sessions
                 ADD COLUMN IF NOT EXISTS processing_started_at TIMESTAMP NULL
             """)
+            # Identity migration — link every session to the shared person
+            # spine in the portal. Until now a session recorded a typed name
+            # and a typed plant and nothing else, so an SRT score could not be
+            # tied to the person who earned it.
+            #
+            # SRT is roll-bound: everyone assessed here is an employee, on-roll
+            # or off-roll, so employee_code and email are both required at the
+            # door. person_id stays NULLABLE because sessions created before
+            # this migration have no identity to give them.
+            cur.execute("""
+                ALTER TABLE sessions
+                ADD COLUMN IF NOT EXISTS person_id BIGINT NULL
+            """)
+            cur.execute("""
+                ALTER TABLE sessions
+                ADD COLUMN IF NOT EXISTS employee_code TEXT NULL
+            """)
+            # The address exactly as it was given, kept beside the resolved id.
+            # The address book can change afterwards, and without this there is
+            # no record of what the link was actually made from.
+            cur.execute("""
+                ALTER TABLE sessions
+                ADD COLUMN IF NOT EXISTS captured_email TEXT NULL
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS sessions_person_idx ON sessions(person_id)
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS sessions_employee_code_idx ON sessions(employee_code)
+            """)
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS access_codes (
                     code        TEXT PRIMARY KEY,
@@ -65,7 +95,7 @@ def init_db():
                 )
             """)
         conn.commit()
-        logger.info("PostgreSQL sessions + access_codes tables ready (v4.20 watchdog migration applied)")
+        logger.info("PostgreSQL sessions + access_codes tables ready (identity migration applied)")
     finally:
         conn.close()
 
@@ -92,8 +122,9 @@ def create_session(session_id: str, candidate: dict, questions: list) -> dict:
             cur.execute(
                 """INSERT INTO sessions
                    (session_id, candidate_name, plant_location, assessment_date,
-                    questions, status, progress, scores)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                    questions, status, progress, scores,
+                    person_id, employee_code, captured_email)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (
                     session_id,
                     candidate.get("candidate_name", ""),
@@ -103,6 +134,9 @@ def create_session(session_id: str, candidate: dict, questions: list) -> dict:
                     "in_progress",
                     0,
                     json.dumps({}),
+                    candidate.get("person_id"),
+                    candidate.get("employee_code"),
+                    candidate.get("captured_email"),
                 ),
             )
         conn.commit()

@@ -15,7 +15,9 @@ from fastapi.responses import Response
 from models import (
     CandidateInfo, ScoreRequest, FinalReportRequest, SubmitAllRequest,
     AccessCodeValidate, AccessCodeGenerate, ValidationBatchRequest,
+    IdentityLookup,
 )
+from identity import resolve_employee, identity_configured
 from question_bank import load_questions, get_session_questions
 from scorer import (
     score_question, review_pass,
@@ -852,14 +854,85 @@ async def validate_code(payload: AccessCodeValidate):
     }
 
 
+# ─── API: Identity lookup ───────────────────────────────────────────────────
+# Confirms who the candidate is BEFORE the assessment starts, so their name and
+# plant come from the employee master instead of being typed under time
+# pressure — two fields to fill instead of three, and correctly spelled.
+#
+# Deliberately does NOT consume the access code: this is a read, and a
+# candidate mistyping their employee code should cost them nothing.
+@app.post("/api/identity/lookup")
+async def identity_lookup(payload: IdentityLookup):
+    if not identity_configured():
+        # Railway and local dev have no portal. Say so rather than failing in a
+        # way that looks like the candidate got their own details wrong.
+        raise HTTPException(
+            status_code=503,
+            detail="The employee directory is not available in this environment.",
+        )
+
+    resolved = resolve_employee(
+        employee_code=(payload.employee_code or "").strip(),
+        email=(payload.email or "").strip().lower(),
+    )
+    if not resolved["ok"]:
+        if resolved["reason"] == "not_found":
+            raise HTTPException(
+                status_code=404,
+                detail=resolved.get("message")
+                       or "No employee found with that code and e-mail address. Please check both with HR.",
+            )
+        raise HTTPException(
+            status_code=503,
+            detail="Could not reach the employee directory just now. Please try again in a minute.",
+        )
+
+    person = resolved["person"]
+    employment = person.get("employment") or {}
+    # Only what the form needs to show back. The rest of the person record is
+    # none of a candidate-facing page's business.
+    return {
+        "employee_code": person.get("employee_code"),
+        "full_name":     person.get("full_name"),
+        "designation":   employment.get("designation"),
+        "location":      employment.get("location"),
+    }
+
+
 # ─── API: Start Session ─────────────────────────────────────────────────────
 @app.post("/api/start-session")
 async def start_session(candidate: CandidateInfo):
-    # Validate + atomically consume the access code
     code = (candidate.access_code or "").strip()
     if not code or not code.isdigit() or len(code) != 10:
         raise HTTPException(status_code=400, detail="A valid 10-digit access code is required.")
 
+    # Identity is resolved BEFORE the access code is consumed. Consuming is a
+    # write and resolving is a read, so the read goes first: a candidate whose
+    # code is fine but whose directory lookup fails must not lose a use of a
+    # shared 10-use code to an outage they did not cause.
+    #
+    # This is also the real check. The lookup the browser did is a convenience
+    # for the candidate; a form field is not evidence of who somebody is, so
+    # name and plant are taken from the master, not from the request.
+    resolved = resolve_employee(
+        employee_code=(candidate.employee_code or "").strip(),
+        email=(candidate.email or "").strip().lower(),
+    )
+    if not resolved["ok"] and resolved["reason"] == "not_found":
+        raise HTTPException(
+            status_code=403,
+            detail=resolved.get("message")
+                   or "That employee code and e-mail address are not on the employee master. "
+                      "Please check both with HR.",
+        )
+    if not resolved["ok"] and resolved["reason"] == "unavailable":
+        raise HTTPException(
+            status_code=503,
+            detail="Could not reach the employee directory just now. Please try again in a minute — "
+                   "your access code has not been used.",
+        )
+
+    # Validate + atomically consume the access code
     consumed = consume_access_code(code)
     if not consumed:
         # Either code doesn't exist or it's exhausted — distinguish for UX
@@ -875,9 +948,23 @@ async def start_session(candidate: CandidateInfo):
         code, consumed["used_count"], consumed["max_uses"],
     )
 
+    person = resolved["person"] if resolved["ok"] else None
+    details = dict(candidate.model_dump())
+    if person:
+        details["person_id"]      = person.get("person_id")
+        details["employee_code"]  = person.get("employee_code")
+        details["captured_email"] = person.get("email")
+        details["candidate_name"] = person.get("full_name") or details.get("candidate_name") or ""
+        # The master's location is authoritative and better spelled than a
+        # free-text plant name typed under time pressure.
+        employment = person.get("employment") or {}
+        details["plant_location"] = employment.get("location") or details.get("plant_location") or ""
+    details.pop("email", None)          # kept as captured_email; not duplicated
+    details.pop("access_code", None)    # never stored with the session
+
     session_id = str(uuid.uuid4())
     questions  = get_session_questions(questions_db, per_competency=3)
-    session    = create_session(session_id, candidate.model_dump(), questions)
+    session    = create_session(session_id, details, questions)
     _cache[session_id] = session
 
     safe_questions = [

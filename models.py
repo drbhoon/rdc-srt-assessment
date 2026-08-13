@@ -3,10 +3,22 @@ from typing import List, Dict, Any, Optional
 
 
 class CandidateInfo(BaseModel):
-    candidate_name: str
-    plant_location: str
+    # Sent by the browser, but NOT trusted: the server re-resolves the identity
+    # and overwrites name and plant from the employee master. A form field is
+    # not evidence of who somebody is.
+    candidate_name: Optional[str] = None
+    plant_location: Optional[str] = None
     assessment_date: str
     access_code: Optional[str] = None  # 10-digit HR-shared code; required for public flow
+    # SRT is roll-bound — everyone assessed here is an employee, on-roll or
+    # off-roll. Both are required, and both are checked against the master.
+    employee_code: str
+    email: str
+
+
+class IdentityLookup(BaseModel):
+    employee_code: str
+    email: str
 
 
 class AccessCodeValidate(BaseModel):
