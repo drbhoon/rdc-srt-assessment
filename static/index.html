@@ -242,6 +242,10 @@
     btn.disabled  = true;
     btn.innerHTML = '<span>Validating…</span>';
 
+    // Only the CALL is guarded. Anything after it has already been told the
+    // code is good, and a fault there is our bug — reporting it in the same
+    // red box would tell the candidate their valid code was rejected.
+    let d;
     try {
       const res = await fetch('/api/validate-code', {
         method: 'POST',
@@ -249,24 +253,28 @@
         body:   JSON.stringify({ code }),
       });
       if (!res.ok) throw new Error(await parseErr(res));
-      const d = await res.json();
-
-      validatedCode = code;
-      codeInput.disabled = true;
-      btn.style.display  = 'none';
-      metaEl.textContent = `✅ Code valid — ${d.remaining} of ${d.max_uses} slots available.`;
-      metaEl.style.display = 'block';
-
-      // Reveal the registration card
-      document.getElementById('registrationCard').style.display = 'block';
-      document.getElementById('candidateName').focus();
-      document.getElementById('registrationCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      d = await res.json();
     } catch (err) {
       errEl.textContent   = '❌ ' + err.message;
       errEl.style.display = 'block';
       btn.disabled        = false;
       btn.innerHTML       = '<span>Validate Code →</span>';
+      return;
     }
+
+    validatedCode = code;
+    codeInput.disabled = true;
+    btn.style.display  = 'none';
+    metaEl.textContent = `✅ Code valid — ${d.remaining} of ${d.max_uses} slots available.`;
+    metaEl.style.display = 'block';
+
+    // Reveal the registration card. Employee code is the first field the
+    // candidate fills — identity is looked up from code + e-mail, so there is
+    // no free-text name field to land on.
+    const regCard = document.getElementById('registrationCard');
+    regCard.style.display = 'block';
+    regCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('employeeCode').focus({ preventScroll: true });
   });
 
   // Step 2: Begin assessment (sends access code along with registration)
