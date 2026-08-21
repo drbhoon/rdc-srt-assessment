@@ -4,9 +4,22 @@ Every app on the platform links its records to one shared person_id rather than
 keeping its own idea of who somebody is. This turns the e-mail collected at the
 door into that id.
 
-SRT is ROLL-BOUND: it assesses employees, on-roll or off-roll, never outside
-candidates. So it always asks with require_internal, and a person who is not on
-the rolls is refused rather than invented.
+SRT has two doors, and they get opposite treatment.
+
+The EMPLOYEE door is roll-bound: it asks with require_internal, and somebody
+who is not on the rolls is refused rather than invented. Both the employee code
+and the e-mail must point at the same person.
+
+The EXTERNAL door is for recruitment, where by definition nobody is on the
+master yet. It asks with require_internal=False and create=True, so the address
+is registered as an external person on the shared spine — the same person a
+later DISC or recruitment record will resolve to, and the same person they
+become when they are hired.
+
+The difference that matters is what an unreachable portal means. For the
+employee door it is a refusal, because the check is the point. For the external
+door it is not, because there was nothing to check against: the candidate is
+admitted and the session records the address without a person_id.
 
 Uses urllib from the standard library on purpose. The only HTTP client in the
 image is httpx, and that arrives transitively through `anthropic` — a

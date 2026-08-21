@@ -17,7 +17,7 @@ from models import (
     AccessCodeValidate, AccessCodeGenerate, ValidationBatchRequest,
     IdentityLookup,
 )
-from identity import resolve_employee, identity_configured
+from identity import resolve_employee, resolve_person, identity_configured
 from question_bank import load_questions, get_session_questions
 from scorer import (
     score_question, review_pass,
@@ -906,6 +906,13 @@ async def start_session(candidate: CandidateInfo):
     if not code or not code.isdigit() or len(code) != 10:
         raise HTTPException(status_code=400, detail="A valid 10-digit access code is required.")
 
+    kind = (candidate.candidate_type or "employee").strip().lower()
+    if kind not in ("employee", "external"):
+        raise HTTPException(status_code=400, detail="Unknown candidate type.")
+    email = (candidate.email or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="An e-mail address is required.")
+
     # Identity is resolved BEFORE the access code is consumed. Consuming is a
     # write and resolving is a read, so the read goes first: a candidate whose
     # code is fine but whose directory lookup fails must not lose a use of a
@@ -913,24 +920,57 @@ async def start_session(candidate: CandidateInfo):
     #
     # This is also the real check. The lookup the browser did is a convenience
     # for the candidate; a form field is not evidence of who somebody is, so
-    # name and plant are taken from the master, not from the request.
-    resolved = resolve_employee(
-        employee_code=(candidate.employee_code or "").strip(),
-        email=(candidate.email or "").strip().lower(),
-    )
-    if not resolved["ok"] and resolved["reason"] == "not_found":
-        raise HTTPException(
-            status_code=403,
-            detail=resolved.get("message")
-                   or "That employee code and e-mail address are not on the employee master. "
-                      "Please check both with HR.",
+    # for an employee the name and plant are taken from the master, not from
+    # the request.
+    if kind == "employee":
+        if not (candidate.employee_code or "").strip():
+            raise HTTPException(status_code=400, detail="Employee code is required.")
+        resolved = resolve_employee(
+            employee_code=(candidate.employee_code or "").strip(),
+            email=email,
         )
-    if not resolved["ok"] and resolved["reason"] == "unavailable":
-        raise HTTPException(
-            status_code=503,
-            detail="Could not reach the employee directory just now. Please try again in a minute — "
-                   "your access code has not been used.",
+        if not resolved["ok"] and resolved["reason"] == "not_found":
+            raise HTTPException(
+                status_code=403,
+                detail=resolved.get("message")
+                       or "That employee code and e-mail address are not on the employee master. "
+                          "Please check both with HR.",
+            )
+        if not resolved["ok"] and resolved["reason"] == "unavailable":
+            raise HTTPException(
+                status_code=503,
+                detail="Could not reach the employee directory just now. Please try again in a minute — "
+                       "your access code has not been used.",
+            )
+    else:
+        # Recruitment. Nobody outside is on the master yet, so the address is
+        # REGISTERED as an external person rather than checked against one.
+        #
+        # This flow is OPEN, and that decides how failure is handled: an
+        # unreachable portal must not turn away an interviewee who is sitting
+        # in front of HR with a valid access code. The session is written
+        # without a person_id, and the address is stored either way, so the
+        # link can be made afterwards.
+        typed_name = (candidate.candidate_name or "").strip()
+        if len(typed_name) < 2:
+            raise HTTPException(status_code=400, detail="Please enter your full name.")
+        resolved = resolve_person(
+            email=email,
+            name=typed_name,
+            require_internal=False,
+            create=True,
         )
+        if not resolved["ok"] and resolved["reason"] not in ("unconfigured", "unavailable"):
+            raise HTTPException(
+                status_code=400,
+                detail=resolved.get("message")
+                       or "That e-mail address could not be used. Please check it and try again.",
+            )
+        if not resolved["ok"]:
+            logger.warning(
+                "[start-session] external candidate admitted without a person_id (%s)",
+                resolved["reason"],
+            )
 
     # Validate + atomically consume the access code
     consumed = consume_access_code(code)
@@ -950,15 +990,37 @@ async def start_session(candidate: CandidateInfo):
 
     person = resolved["person"] if resolved["ok"] else None
     details = dict(candidate.model_dump())
+    details["captured_email"] = email
     if person:
         details["person_id"]      = person.get("person_id")
         details["employee_code"]  = person.get("employee_code")
-        details["captured_email"] = person.get("email")
-        details["candidate_name"] = person.get("full_name") or details.get("candidate_name") or ""
-        # The master's location is authoritative and better spelled than a
-        # free-text plant name typed under time pressure.
+        details["captured_email"] = person.get("email") or email
         employment = person.get("employment") or {}
-        details["plant_location"] = employment.get("location") or details.get("plant_location") or ""
+
+        # An outside applicant who types an address the master already holds
+        # IS an employee, whichever tab they clicked, and the record should
+        # say so. Their name and plant then come from the master for the same
+        # reason they do in the employee flow: it is the spelling HR holds,
+        # and a typed one puts a second version of the same person on the
+        # report. The master's location is also better spelled than a plant
+        # name typed under time pressure.
+        if person.get("employee_code"):
+            details["candidate_type"] = "employee"
+            details["candidate_name"] = person.get("full_name") or details.get("candidate_name") or ""
+            details["plant_location"] = employment.get("location") or details.get("plant_location") or ""
+        else:
+            # A genuine external. The typed name is all there is, and it is
+            # what HR will search the dashboard for, so it stands.
+            details["candidate_type"] = "external"
+            details["candidate_name"] = (details.get("candidate_name") or "").strip() or person.get("full_name") or ""
+            details["plant_location"] = (details.get("plant_location") or "").strip()
+    elif kind == "external":
+        # Portal unreachable or not configured. Admitted anyway, per the open
+        # policy above, with nothing invented that we could not confirm.
+        details["candidate_type"] = "external"
+        details["employee_code"]  = None
+        details["candidate_name"] = (details.get("candidate_name") or "").strip()
+        details["plant_location"] = (details.get("plant_location") or "").strip()
     details.pop("email", None)          # kept as captured_email; not duplicated
     details.pop("access_code", None)    # never stored with the session
 

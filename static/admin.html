@@ -82,6 +82,10 @@
     .badge-processing { background:#cfe2ff; color:#084298; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:700; }
     .badge-failed     { background:#f8d7da; color:#721c24; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:700; }
     .badge-stuck      { background:#fbd5b5; color:#7a3e00; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:700; }
+    /* Recruitment candidate — not on the employee master. Sits beside the
+       name rather than in a column of its own: the table is already twelve
+       columns wide, and this only ever applies to a minority of rows. */
+    .badge-external   { background:#e6d9f5; color:#4b2c7a; padding:2px 8px; border-radius:12px; font-size:10px; font-weight:700; margin-left:6px; vertical-align:middle; }
     .version-badge    { background: rgba(255,255,255,.18); color:#fff; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:700; letter-spacing:.5px; margin-left:8px; }
     .btn-diagnose { background: #6f42c1; color: #fff; border: none; padding: 5px 10px;
       border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; margin-left: 6px; }
@@ -550,7 +554,10 @@ function renderTable() {
   const filtered = q
     ? allSessions.filter(s =>
         s.candidate_name.toLowerCase().includes(q) ||
-        s.plant_location.toLowerCase().includes(q))
+        s.plant_location.toLowerCase().includes(q) ||
+        // So "external" typed in the search box lists exactly the
+        // recruitment sessions.
+        (s.candidate_type === 'external' && 'external'.includes(q)))
     : allSessions;
 
   const body = document.getElementById('sessionsBody');
@@ -619,7 +626,7 @@ function renderTable() {
     body.innerHTML += `
       <tr>
         <td>${i+1}</td>
-        <td><strong>${escHtml(s.candidate_name)}</strong></td>
+        <td><strong>${escHtml(s.candidate_name)}</strong>${s.candidate_type === 'external' ? '<span class="badge-external" title="External recruitment candidate — not on the employee master">External</span>' : ''}</td>
         <td>${escHtml(s.plant_location)}</td>
         <td>${escHtml(s.assessment_date)}</td>
         <td title="${escHtml(absTime(s.created_at))}" style="font-size:12px;color:var(--grey-mid);">${escHtml(relTime(s.created_at))}</td>

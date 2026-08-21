@@ -10,9 +10,20 @@ class CandidateInfo(BaseModel):
     plant_location: Optional[str] = None
     assessment_date: str
     access_code: Optional[str] = None  # 10-digit HR-shared code; required for public flow
-    # SRT is roll-bound — everyone assessed here is an employee, on-roll or
-    # off-roll. Both are required, and both are checked against the master.
-    employee_code: str
+
+    # Which door the candidate came through.
+    #
+    #   "employee" — on-roll or off-roll. employee_code AND email are both
+    #                required, and both are checked against the master.
+    #   "external" — a recruitment candidate who is not on the rolls yet.
+    #                E-mail identifies them and the name is typed, because
+    #                there is nothing to look it up in.
+    #
+    # Not enforced by the type: the fields a flow requires differ, so
+    # start_session validates per type and can say which field is missing
+    # instead of pydantic rejecting the whole body with one shape.
+    candidate_type: str = "employee"
+    employee_code: Optional[str] = None
     email: str
 
 

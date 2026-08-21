@@ -108,11 +108,13 @@
   const candidate = JSON.parse(sessionStorage.getItem('rdc_candidate') || '{}');
   const info = document.getElementById('candidateInfo');
   if (candidate.candidate_name) {
-    info.innerHTML = `
-      <div class="ci-chip">👤 ${candidate.candidate_name}</div>
-      <div class="ci-chip">🏭 ${candidate.plant_location || ''}</div>
-      <div class="ci-chip">📅 ${candidate.assessment_date || ''}</div>
-    `;
+    // An external recruitment candidate need not name a plant, and an empty
+    // chip with nothing but a factory icon in it reads as a fault.
+    info.innerHTML = [
+      `<div class="ci-chip">👤 ${candidate.candidate_name}</div>`,
+      candidate.plant_location ? `<div class="ci-chip">🏭 ${candidate.plant_location}</div>` : '',
+      candidate.assessment_date ? `<div class="ci-chip">📅 ${candidate.assessment_date}</div>` : '',
+    ].join('');
   }
 
   // Clear sensitive session data from browser

@@ -79,6 +79,19 @@ def init_db():
                 ALTER TABLE sessions
                 ADD COLUMN IF NOT EXISTS captured_email TEXT NULL
             """)
+            # SRT is also used to screen people who are NOT on the rolls yet —
+            # recruitment. Those sessions carry a typed name and e-mail and no
+            # employee code, so "employee_code IS NULL" alone cannot tell an
+            # outside candidate apart from a pre-identity legacy row.
+            #
+            # Records what the RESOLUTION found, not which tab was clicked: if
+            # an outside applicant types an address the master already holds,
+            # this says 'employee', because that is what they are. Existing
+            # rows default to 'employee', which is what SRT admitted until now.
+            cur.execute("""
+                ALTER TABLE sessions
+                ADD COLUMN IF NOT EXISTS candidate_type TEXT NOT NULL DEFAULT 'employee'
+            """)
             cur.execute("""
                 CREATE INDEX IF NOT EXISTS sessions_person_idx ON sessions(person_id)
             """)
@@ -123,8 +136,8 @@ def create_session(session_id: str, candidate: dict, questions: list) -> dict:
                 """INSERT INTO sessions
                    (session_id, candidate_name, plant_location, assessment_date,
                     questions, status, progress, scores,
-                    person_id, employee_code, captured_email)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    person_id, employee_code, captured_email, candidate_type)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (
                     session_id,
                     candidate.get("candidate_name", ""),
@@ -137,6 +150,7 @@ def create_session(session_id: str, candidate: dict, questions: list) -> dict:
                     candidate.get("person_id"),
                     candidate.get("employee_code"),
                     candidate.get("captured_email"),
+                    candidate.get("candidate_type") or "employee",
                 ),
             )
         conn.commit()
@@ -159,7 +173,7 @@ def get_session(session_id: str) -> Optional[dict]:
                           status, progress, error,
                           questions, collected_answers, scores,
                           report, pdf_data, pdf_error,
-                          processing_started_at
+                          processing_started_at, candidate_type
                    FROM sessions WHERE session_id = %s""",
                 (session_id,),
             )
@@ -172,6 +186,7 @@ def get_session(session_id: str) -> Optional[dict]:
                     "candidate_name":  row[0],
                     "plant_location":  row[1],
                     "assessment_date": row[2],
+                    "candidate_type":  row[13] or "employee",
                 },
                 "status":            row[3],
                 "progress":          row[4],
@@ -267,6 +282,7 @@ def list_sessions() -> List[dict]:
                 "candidate_name":     c.get("candidate_name", ""),
                 "plant_location":     c.get("plant_location", ""),
                 "assessment_date":    c.get("assessment_date", ""),
+                "candidate_type":     c.get("candidate_type") or "employee",
                 "created_at":         s.get("created_at"),
                 "status":             s.get("status", "in_progress"),
                 "total_score":        report.get("overall_score_out_of_300"),
@@ -289,7 +305,7 @@ def list_sessions() -> List[dict]:
             cur.execute(
                 """SELECT session_id, candidate_name, plant_location, assessment_date,
                           status, scores, report, pdf_data IS NOT NULL, error, created_at,
-                          collected_answers, processing_started_at
+                          collected_answers, processing_started_at, candidate_type
                    FROM sessions ORDER BY created_at DESC NULLS LAST, assessment_date DESC"""
             )
             result = []
@@ -302,6 +318,7 @@ def list_sessions() -> List[dict]:
                     "candidate_name":     row[1],
                     "plant_location":     row[2],
                     "assessment_date":    row[3],
+                    "candidate_type":     row[12] or "employee",
                     "status":             row[4],
                     "total_score":        (report or {}).get("overall_score_out_of_300"),
                     "normalized":         (report or {}).get("normalized_score_out_of_100"),

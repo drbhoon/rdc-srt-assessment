@@ -60,6 +60,33 @@
       font-size: 13px; margin-top: 10px;
     }
     #registrationCard { display: none; }
+
+    /* Registration tabs. SRT screens serving employees AND people being
+       recruited; the two need different fields, so they get different tabs
+       rather than one form with rules the candidate has to work out. */
+    .reg-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 18px;
+      border-bottom: 2px solid #e3e8ee;
+    }
+    .reg-tab {
+      appearance: none;
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--grey-mid);
+      cursor: pointer;
+    }
+    .reg-tab:hover { color: var(--blue); }
+    .reg-tab.active {
+      color: var(--blue);
+      border-bottom-color: var(--gold);
+    }
   </style>
 </head>
 <body>
@@ -129,26 +156,60 @@
   <!-- Step 2: Candidate Registration (hidden until code is valid) -->
   <div class="card" id="registrationCard">
     <div class="card-title">📋 Candidate Registration</div>
-    <div class="alert alert-info">
-      Enter your employee code and company e-mail. Your name and plant are taken
-      from the employee master, so they appear on the report exactly as HR holds
-      them.
+
+    <div class="reg-tabs" role="tablist">
+      <button type="button" class="reg-tab active" id="tabEmployee"
+              role="tab" aria-selected="true" aria-controls="employeePanel">RDC Employee</button>
+      <button type="button" class="reg-tab" id="tabExternal"
+              role="tab" aria-selected="false" aria-controls="externalPanel">External Candidate</button>
     </div>
+
     <form id="regForm">
-      <div class="form-group">
-        <label>Employee Code *</label>
-        <input type="text" id="employeeCode" placeholder="e.g., A00388" required />
-      </div>
-      <div class="form-group">
-        <label>Company E-mail *</label>
-        <input type="email" id="employeeEmail" placeholder="e.g., name@rdc.in" required />
+      <!-- Serving employee: identity is CHECKED, never typed. -->
+      <div id="employeePanel" role="tabpanel" aria-labelledby="tabEmployee">
+        <div class="alert alert-info">
+          Enter your employee code and company e-mail. Your name and plant are taken
+          from the employee master, so they appear on the report exactly as HR holds
+          them.
+        </div>
+        <div class="form-group">
+          <label>Employee Code *</label>
+          <input type="text" id="employeeCode" placeholder="e.g., A00388" />
+        </div>
+        <div class="form-group">
+          <label>Company E-mail *</label>
+          <input type="email" id="employeeEmail" placeholder="e.g., name@rdc.in" />
+        </div>
+
+        <!-- Filled by the lookup. Shown so the candidate can see who the system
+             thinks they are BEFORE a 75-minute assessment is attributed to that
+             person — a mistyped code caught here costs nothing. -->
+        <div class="alert alert-info" id="identityBox" style="display:none;"></div>
+        <div class="code-err" id="identityErr"></div>
       </div>
 
-      <!-- Filled by the lookup. Shown so the candidate can see who the system
-           thinks they are BEFORE a 75-minute assessment is attributed to that
-           person — a mistyped code caught here costs nothing. -->
-      <div class="alert alert-info" id="identityBox" style="display:none;"></div>
-      <div class="code-err" id="identityErr"></div>
+      <!-- Recruitment: there is no master record to check against yet, so the
+           e-mail is what identifies the candidate and the name is typed. -->
+      <div id="externalPanel" role="tabpanel" aria-labelledby="tabExternal" style="display:none;">
+        <div class="alert alert-info">
+          For candidates applying from outside RDC. Please use the e-mail address you
+          gave HR — your report is filed against it, and it is how your result is
+          matched to your application.
+        </div>
+        <div class="form-group">
+          <label>Full Name *</label>
+          <input type="text" id="externalName" placeholder="As it should appear on your report" />
+        </div>
+        <div class="form-group">
+          <label>E-mail *</label>
+          <input type="email" id="externalEmail" placeholder="e.g., name@example.com" />
+        </div>
+        <div class="form-group">
+          <label>Plant / Location Applied For</label>
+          <input type="text" id="externalLocation" placeholder="Optional — e.g., Mumbai" />
+        </div>
+        <div class="code-err" id="externalErr"></div>
+      </div>
 
       <div class="form-group">
         <label>Assessment Date *</label>
@@ -283,26 +344,71 @@
   // another by changing a field afterwards.
   let verifiedIdentity = null;
 
+  // Which door the candidate came through. Decides which fields are read,
+  // which buttons show, and what the server is told.
+  let activeTab = 'employee';
+
+  const EMPLOYEE_FIELDS = ['employeeCode', 'employeeEmail'];
+  const EXTERNAL_FIELDS = ['externalName', 'externalEmail', 'externalLocation'];
+
+  function showErr(id, message) {
+    const el = document.getElementById(id);
+    el.textContent = message || '';
+    // .code-err is display:none by default, so setting only the text leaves
+    // the message invisible and the candidate staring at a form that simply
+    // did nothing.
+    el.style.display = message ? 'block' : 'none';
+  }
+
+  function setTab(tab) {
+    activeTab = tab;
+    const isEmployee = tab === 'employee';
+
+    document.getElementById('tabEmployee').classList.toggle('active', isEmployee);
+    document.getElementById('tabExternal').classList.toggle('active', !isEmployee);
+    document.getElementById('tabEmployee').setAttribute('aria-selected', String(isEmployee));
+    document.getElementById('tabExternal').setAttribute('aria-selected', String(!isEmployee));
+    document.getElementById('employeePanel').style.display = isEmployee ? '' : 'none';
+    document.getElementById('externalPanel').style.display = isEmployee ? 'none' : '';
+
+    // The hidden panel's inputs are DISABLED, not merely hidden. A hidden
+    // input still takes part in the browser's own form validation, and a
+    // half-typed e-mail on the tab you are not looking at blocks submit with
+    // an error it cannot show you, because the field it wants to point at is
+    // off screen. Disabled fields are excluded from that, and their values
+    // stay readable, so switching back and forth loses nothing.
+    EMPLOYEE_FIELDS.forEach((id) => { document.getElementById(id).disabled = !isEmployee; });
+    EXTERNAL_FIELDS.forEach((id) => { document.getElementById(id).disabled = isEmployee; });
+
+    // An external candidate has nothing to confirm — the name is theirs to
+    // give — so they go straight to the start button.
+    document.getElementById('verifyBtn').style.display = (isEmployee && !verifiedIdentity) ? '' : 'none';
+    document.getElementById('startBtn').style.display  = (!isEmployee || verifiedIdentity) ? '' : 'none';
+    showErr('externalErr', '');
+  }
+
   function resetIdentity() {
     verifiedIdentity = null;
     document.getElementById('identityBox').style.display = 'none';
-    document.getElementById('identityErr').textContent = '';
+    showErr('identityErr', '');
     document.getElementById('startBtn').style.display = 'none';
     document.getElementById('verifyBtn').style.display = '';
   }
   document.getElementById('employeeCode').addEventListener('input', resetIdentity);
   document.getElementById('employeeEmail').addEventListener('input', resetIdentity);
+  document.getElementById('tabEmployee').addEventListener('click', () => setTab('employee'));
+  document.getElementById('tabExternal').addEventListener('click', () => setTab('external'));
+  setTab('employee');
 
   document.getElementById('verifyBtn').addEventListener('click', async () => {
     const btn  = document.getElementById('verifyBtn');
-    const err  = document.getElementById('identityErr');
     const box  = document.getElementById('identityBox');
     const code = document.getElementById('employeeCode').value.trim();
     const mail = document.getElementById('employeeEmail').value.trim();
 
-    err.textContent = '';
+    showErr('identityErr', '');
     if (!code || !mail) {
-      err.textContent = 'Please enter both your employee code and your company e-mail.';
+      showErr('identityErr', 'Please enter both your employee code and your company e-mail.');
       return;
     }
 
@@ -330,7 +436,7 @@
       document.getElementById('startBtn').style.display = '';
       btn.style.display = 'none';
     } catch (e2) {
-      err.textContent = e2.message;
+      showErr('identityErr', e2.message);
       box.style.display = 'none';
     } finally {
       btn.disabled = false;
@@ -346,24 +452,46 @@
       alert('Please validate your access code first.');
       return;
     }
-    if (!verifiedIdentity) {
-      alert('Please confirm your details first.');
-      return;
+
+    const payload = {
+      candidate_type:  activeTab,
+      assessment_date: document.getElementById('assessmentDate').value,
+      access_code:     validatedCode,
+    };
+
+    if (activeTab === 'employee') {
+      if (!verifiedIdentity) {
+        alert('Please confirm your details first.');
+        return;
+      }
+      // Name and plant are sent for display continuity only — the server takes
+      // both from the employee master and ignores what arrives here.
+      payload.employee_code  = document.getElementById('employeeCode').value.trim();
+      payload.email          = document.getElementById('employeeEmail').value.trim();
+      payload.candidate_name = verifiedIdentity.full_name || '';
+      payload.plant_location = verifiedIdentity.location || '';
+    } else {
+      const name = document.getElementById('externalName').value.trim();
+      const mail = document.getElementById('externalEmail').value.trim();
+      showErr('externalErr', '');
+      if (name.length < 2) {
+        showErr('externalErr', 'Please enter your full name.');
+        return;
+      }
+      // Deliberately loose. The address is checked properly by whoever sends
+      // the report to it; a clever pattern here only ever rejects real people
+      // with unusual domains.
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) {
+        showErr('externalErr', 'Please enter a valid e-mail address.');
+        return;
+      }
+      payload.email          = mail;
+      payload.candidate_name = name;
+      payload.plant_location = document.getElementById('externalLocation').value.trim();
     }
 
     btn.disabled = true;
     btn.innerHTML = '<span>Starting...</span>';
-
-    // Name and plant are sent for display continuity only — the server takes
-    // both from the employee master and ignores what arrives here.
-    const payload = {
-      employee_code:   document.getElementById('employeeCode').value.trim(),
-      email:           document.getElementById('employeeEmail').value.trim(),
-      candidate_name:  verifiedIdentity.full_name || '',
-      plant_location:  verifiedIdentity.location || '',
-      assessment_date: document.getElementById('assessmentDate').value,
-      access_code:     validatedCode,
-    };
 
     try {
       const res = await fetch('/api/start-session', {
