@@ -9,8 +9,9 @@ from collections import defaultdict
 
 import anthropic
 from fastapi import FastAPI, HTTPException, Header, BackgroundTasks
+from urllib.parse import quote
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import Response
+from fastapi.responses import Response, RedirectResponse
 
 from models import (
     CandidateInfo, ScoreRequest, FinalReportRequest, SubmitAllRequest,
@@ -1538,7 +1539,19 @@ async def submission_status(session_id: str):
 
 
 # ─── API: Download PDF ──────────────────────────────────────────────────────
-@app.get("/api/download-pdf/{session_id}")
+# Under /api/admin for a reason: on the HR platform the admin surface is gated
+# by PATH. nginx matches ^/srt/(admin|api/admin), and only inside that match
+# does it ask the portal who the caller is and attach X-Auth-Email. Everywhere
+# else the header is deliberately cleared, so a caller cannot forge one.
+#
+# This endpoint used to sit at /api/download-pdf, outside that pattern. The
+# console's other calls all go to /api/admin/... and were authorised; the
+# download alone arrived with no identity and no token — SSO logins never set
+# one — so every PDF came back "Unauthorized — admin only" to an admin who
+# was signed in and looking at the dashboard that had just loaded fine.
+#
+# Any new admin endpoint belongs under this prefix for the same reason.
+@app.get("/api/admin/download-pdf/{session_id}")
 async def download_pdf(session_id: str, x_admin_token: str = Header(None), x_auth_email: str = Header(None)):
     if not _admin_identity(x_admin_token, x_auth_email):
         raise HTTPException(status_code=401, detail="Unauthorized — admin only")
@@ -1554,4 +1567,17 @@ async def download_pdf(session_id: str, x_admin_token: str = Header(None), x_aut
         content=pdf_bytes,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="RDC_SBCA_{name}.pdf"'},
+    )
+
+
+# The old path, kept so an open console tab or a bookmark still works.
+# A redirect rather than a second copy of the handler: the point is to land on
+# the gated path, which is the only place the identity gets attached. Carries
+# ROOT_PATH because the redirect is followed by the browser, which knows the
+# app as /srt and not as /.
+@app.get("/api/download-pdf/{session_id}")
+async def download_pdf_legacy(session_id: str):
+    return RedirectResponse(
+        f"{ROOT_PATH}/api/admin/download-pdf/{quote(session_id, safe='')}",
+        status_code=307,
     )

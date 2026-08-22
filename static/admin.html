@@ -769,9 +769,11 @@ function downloadPdf() {
 }
 
 function downloadPdfFor(sid) {
-  // Create a hidden link and click it — passing admin token via header isn't possible
-  // so we use a query-param approach for downloads
-  const url = `/api/download-pdf/${sid}`;
+  // /api/admin/... on purpose: the platform decides what is an admin request
+  // from the PATH, and only attaches the signed-in identity inside that
+  // prefix. Off it, this download came back 401 even though every other call
+  // on this page was authorised.
+  const url = `/api/admin/download-pdf/${sid}`;
   fetch(url, { headers: { 'X-Admin-Token': adminToken } })
     .then(async res => {
       if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }

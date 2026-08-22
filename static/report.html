@@ -244,7 +244,8 @@ function renderReport() {
   });
 
   // PDF Download link
-  document.getElementById('pdfDownloadBtn').href = `${window.BASE_PATH || ''}/api/download-pdf/${sessionId}`;
+  // Same admin-gated path as the console — see the note on the endpoint.
+  document.getElementById('pdfDownloadBtn').href = `${window.BASE_PATH || ''}/api/admin/download-pdf/${sessionId}`;
 }
 
 renderReport();
