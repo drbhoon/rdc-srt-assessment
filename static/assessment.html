@@ -599,7 +599,10 @@ function renderQuestion(idx) {
 
   document.getElementById('prevBtn').disabled = (idx === 0);
   const isLast = (idx === questions.length - 1);
-  document.getElementById('nextBtn').textContent = isLast ? 'Review & Submit →' : 'Next Question →';
+  // There is no question after the last one, so a Next button there did
+  // nothing. Hide it; the Submit section below appears instead, and Previous
+  // and the question dots still let the candidate go back before submitting.
+  document.getElementById('nextBtn').style.display = isLast ? 'none' : '';
 
   if (isLast) {
     document.getElementById('answeredFinal').textContent = nAns;
