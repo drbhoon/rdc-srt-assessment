@@ -67,6 +67,7 @@ def generate_pqi_pdf(report: dict, candidate: dict) -> bytes:
     header = Table([
         [Paragraph("RDC Plant Quality Incharge (PQI)", title)],
         [Paragraph("Competency Assessment Report", title)],
+        [Paragraph("RDC – Situation Based Competency Assessment Engine (RDC-KYS)", sub)],
         [Paragraph(f"SRT – Situation Reaction Test  |  30 Situations  |  10 Competencies  |  "
                    f"Master {_esc(master.get('version', ''))} ({_esc(master.get('status', ''))})", sub)],
         [Paragraph("CONFIDENTIAL – HR / Authorised Assessors Only", conf)],
@@ -232,6 +233,6 @@ def generate_pqi_pdf(report: dict, candidate: dict) -> bytes:
 
     story += [Spacer(1, 0.4 * cm), Paragraph(
         "Confidential. For HR and authorised assessors only. Readiness bands are provisional until pilot calibration. "
-        "RDC SRT Assessment Engine — PQI.", footer)]
+        "RDC – Situation Based Competency Assessment Engine (RDC-KYS).", footer)]
     doc.build(story)
     return buf.getvalue()

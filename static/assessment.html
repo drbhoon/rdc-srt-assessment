@@ -103,7 +103,7 @@
       <img src="/static/rdc-logo.png?v=1" alt="RDC" onerror="this.remove();this.parentNode.classList.add('no-image');" />
     </div>
     <div style="flex:1">
-      <div class="header-title">RDC – Situation Based Competency Assessment Engine (RDC-KYS)</div>
+      <div class="header-title">Plant Incharge Situation Based Competency Assessment Engine (PLANT-PRO)</div>
       <div class="header-sub" id="candidateHeader">Loading...</div>
     </div>
     <div class="timer-wrap" id="timerDisplay"><span>⏱</span><span id="timerText">--:--</span></div>
@@ -274,6 +274,8 @@ let saveTimer = null;
 
 if (isPqi) {
   document.title = 'Plant Quality Incharge (PQI) – SRT Assessment | RDC';
+  document.querySelector('.header-title').textContent =
+    'RDC – Situation Based Competency Assessment Engine (RDC-KYS)';
   document.getElementById('voiceLangWrap').style.display = 'block';
   document.getElementById('langEn').classList.toggle('active', voiceLang === 'en-IN');
   document.getElementById('langHi').classList.toggle('active', voiceLang === 'hi-IN');

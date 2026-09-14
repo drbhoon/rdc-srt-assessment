@@ -303,7 +303,7 @@
       </div>
       <div>
         <h1>
-          RDC – Situation Based Competency Assessment Engine (RDC-KYS)
+          <span id="dashTitle">RDC – Plant Incharge Situation Based Competency Assessment Engine (PLANT-PRO)</span>
           <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.22</span>
         </h1>
         <div class="sub">Admin Panel | Confidential – Head Office Use Only</div>
@@ -530,6 +530,10 @@ function setAssessment(type) {
   try { localStorage.setItem('rdc_admin_assessment', activeAssessment); } catch (_) {}
   document.getElementById('tab-plant_manager').classList.toggle('active', activeAssessment === 'plant_manager');
   document.getElementById('tab-pqi').classList.toggle('active', activeAssessment === 'pqi');
+  // The engine name follows the tab: PLANT-PRO for Plant Manager, RDC-KYS for PQI.
+  document.getElementById('dashTitle').textContent = activeAssessment === 'pqi'
+    ? 'RDC – Situation Based Competency Assessment Engine (RDC-KYS)'
+    : 'RDC – Plant Incharge Situation Based Competency Assessment Engine (PLANT-PRO)';
   document.getElementById('sessionsHead').innerHTML =
     '<tr>' + TABLE_HEADERS[activeAssessment].map(h => `<th>${h}</th>`).join('') + '</tr>';
   document.getElementById('st-avg-label').textContent =
