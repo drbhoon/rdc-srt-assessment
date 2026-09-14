@@ -55,7 +55,8 @@ def test_identity(employee_code: str, email: str) -> dict | None:
     SRT_TEST_IDENTITIES holds "CODE|e-mail|Full Name|Location" entries separated
     by semicolons. It is consulted only when identity_configured() is False, so
     on hr.rdcc.ai, where the portal is configured, it has no effect even if set.
-    As against the real master, the code AND the e-mail must both match.
+    As against the real master, the code AND the e-mail must both match — except
+    that a CODE of "*" accepts whatever employee code the tester types.
     """
     if identity_configured():
         return None
@@ -65,9 +66,9 @@ def test_identity(employee_code: str, email: str) -> dict | None:
         return None
     for entry in (os.environ.get("SRT_TEST_IDENTITIES") or "").split(";"):
         parts = [p.strip() for p in entry.split("|")]
-        if len(parts) >= 2 and parts[0].casefold() == code and parts[1].casefold() == mail:
+        if len(parts) >= 2 and parts[1].casefold() == mail and (parts[0] == "*" or parts[0].casefold() == code):
             return {
-                "employee_code": parts[0],
+                "employee_code": (employee_code or "").strip() if parts[0] == "*" else parts[0],
                 "full_name":     parts[2] if len(parts) > 2 and parts[2] else parts[0],
                 "designation":   "Test identity",
                 "location":      parts[3] if len(parts) > 3 else "",

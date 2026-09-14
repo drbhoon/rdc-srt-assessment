@@ -28,6 +28,15 @@ def test_a_test_identity_stands_in_where_there_is_no_portal(store, monkeypatch):
     assert lookup("K00090", "ksbhoon@rdc.in").status_code == 503
 
 
+def test_a_wildcard_code_accepts_any_employee_code_for_that_email(store, monkeypatch):
+    monkeypatch.setenv("SRT_TEST_IDENTITIES", "*|tester@rdc.in|Tester (test)|Test")
+    r = lookup(" A00123 ", "Tester@rdc.in")
+    assert r.json() == {"employee_code": "A00123", "full_name": "Tester (test)", "designation": "Test identity",
+                        "location": "Test"}
+    assert lookup("A00123", "other@rdc.in").status_code == 503               # the e-mail must still match
+    assert lookup("", "tester@rdc.in").status_code in (422, 503)              # a code is still required
+
+
 def test_the_test_list_is_ignored_when_the_portal_is_configured(store, monkeypatch):
     monkeypatch.setenv("SRT_TEST_IDENTITIES", "K00089|ksbhoon@rdc.in|Test Person|Head Office")
     monkeypatch.setattr(identity, "MASTER_API_URL", "https://portal.example")
