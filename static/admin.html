@@ -247,6 +247,30 @@
     .comp-modal-bar  { flex: 2; background: #eef1f6; border-radius: 4px; height: 10px; overflow: hidden; }
     .comp-modal-fill { height: 100%; border-radius: 4px; }
     .comp-modal-score{ width: 40px; text-align: right; font-size: 13px; font-weight: 700; color: var(--blue); }
+
+    /* ── Assessment tabs (Plant Manager / PQI) ── */
+    .assess-tabs { display: flex; gap: 6px; padding: 16px 24px 0; }
+    .assess-tab {
+      background: #fff; border: 1px solid #d0d9e6; color: var(--blue); border-radius: 8px 8px 0 0;
+      padding: 9px 18px; font-size: 13px; font-weight: 700; cursor: pointer;
+    }
+    .assess-tab.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+    .type-badge { padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; margin-left: 6px; }
+    .type-badge.pm  { background: #e8f0f7; color: var(--blue); }
+    .type-badge.pqi { background: #fff3cd; color: #7a5b00; }
+    .pqi-banner { margin: 12px 24px 0; padding: 10px 14px; border-radius: 8px; font-size: 13px; display: none; }
+    .pqi-banner.err  { background: #f8d7da; color: #721c24; display: block; }
+    .pqi-banner.warn { background: #fff8e1; color: #5a4500; display: block; }
+    .badge-review { background:#fbd5b5; color:#7a3e00; padding:2px 8px; border-radius:12px; font-size:10px; font-weight:700; margin-left:4px; }
+    .ready-dev { color: #cc7700; font-weight: 700; }
+    .pqi-section { margin-bottom: 18px; }
+    .pqi-section h4 { font-size: 13px; color: var(--blue); margin: 0 0 8px; }
+    .pqi-alert { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; }
+    .pqi-alert.review { background: #fff4e0; border: 1px solid #cc7700; color: #5a3a00; }
+    .pqi-alert.flag   { background: #fdecec; border: 1px solid #cc0000; color: #6b0000; }
+    .srt-detail { border: 1px solid #e3e8ee; border-radius: 8px; margin-bottom: 8px; }
+    .srt-detail summary { cursor: pointer; padding: 8px 12px; font-size: 13px; font-weight: 600; color: #333; }
+    .srt-detail .body { padding: 0 12px 10px; font-size: 12.5px; color: #333; line-height: 1.55; }
   </style>
 </head>
 <body>
@@ -289,11 +313,19 @@
     <button class="dash-logout" onclick="logout()">Logout</button>
   </div>
 
+  <!-- Which assessment the dashboard shows. HR chooses here; candidates never
+       choose — their access code decides. -->
+  <div class="assess-tabs" id="assessTabs">
+    <button class="assess-tab active" id="tab-plant_manager" onclick="setAssessment('plant_manager')">Plant Manager</button>
+    <button class="assess-tab" id="tab-pqi" onclick="setAssessment('pqi')">Plant Quality Incharge (PQI)</button>
+  </div>
+  <div class="pqi-banner" id="pqiBanner"></div>
+
   <div class="stats-row" id="statsRow">
     <div class="stat-card"><div class="stat-num" id="st-total">0</div><div class="stat-label">Total Assessments</div></div>
     <div class="stat-card"><div class="stat-num" id="st-done">0</div><div class="stat-label">Completed</div></div>
     <div class="stat-card"><div class="stat-num" id="st-inprog">0</div><div class="stat-label">In Progress</div></div>
-    <div class="stat-card"><div class="stat-num" id="st-avg">—</div><div class="stat-label">Avg Score (/300)</div></div>
+    <div class="stat-card"><div class="stat-num" id="st-avg">—</div><div class="stat-label" id="st-avg-label">Avg Score (/300)</div></div>
   </div>
 
   <div class="toolbar">
@@ -307,7 +339,7 @@
 
   <div class="table-wrap">
     <table>
-      <thead>
+      <thead id="sessionsHead">
         <tr>
           <th>#</th>
           <th>Candidate Name</th>
@@ -342,6 +374,13 @@
       scoring + report + PDF pipeline. No need to answer 30 questions.
     </div>
     <div class="form-group">
+      <label>Assessment</label>
+      <select id="qt-type" style="width:100%;padding:8px 12px;border:1px solid #d0d9e6;border-radius:7px;font-size:13px;">
+        <option value="plant_manager">Plant Manager</option>
+        <option value="pqi">Plant Quality Incharge (PQI)</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin-top:12px;">
       <label>Test Candidate Name</label>
       <input type="text" id="qt-name" value="Admin Test Run" style="width:100%;padding:8px 12px;border:1px solid #d0d9e6;border-radius:7px;font-size:13px;"/>
     </div>
@@ -372,6 +411,15 @@
     </div>
 
     <div class="form-group">
+      <label>Assessment this code starts *</label>
+      <div style="display:flex;gap:18px;font-size:13px;margin-top:4px;">
+        <label style="font-weight:600;"><input type="radio" name="ac-type" value="plant_manager" checked/> Plant Manager</label>
+        <label style="font-weight:600;"><input type="radio" name="ac-type" value="pqi"/> Plant Quality Incharge (PQI)</label>
+      </div>
+      <div style="font-size:11px;color:var(--grey-mid);margin-top:4px;">The code alone decides the assessment — candidates are never offered a choice.</div>
+    </div>
+
+    <div class="form-group" style="margin-top:12px;">
       <label>Optional Label (for your reference only)</label>
       <input type="text" id="ac-label" placeholder="e.g., Bangalore batch 1 / Nov-2026"
              style="width:100%;padding:8px 12px;border:1px solid #d0d9e6;border-radius:7px;font-size:13px;"/>
@@ -461,6 +509,66 @@ let adminToken   = '';
 let allSessions  = [];
 let currentSid   = '';
 
+// ─── Assessment tabs ─────────────────────────────────────────────────────────
+// Which assessment the dashboard shows, remembered per browser. The Plant
+// Manager tab renders exactly the table and stats it always did.
+let activeAssessment = (() => {
+  try { return localStorage.getItem('rdc_admin_assessment') === 'pqi' ? 'pqi' : 'plant_manager'; }
+  catch (_) { return 'plant_manager'; }
+})();
+let pqiMasterStatus = null;
+
+const TABLE_HEADERS = {
+  plant_manager: ['#', 'Candidate Name', 'Plant Location', 'Date', 'Created', 'Status', 'Score /300',
+                  'Normalised %', 'Readiness', 'Answered', 'Actions', 'Delete'],
+  pqi:           ['#', 'Candidate Name', 'Plant Location', 'Date', 'Created', 'Status', 'Overall /100',
+                  'Technical', 'Business', 'AFI', 'Readiness', 'Answered', 'Actions', 'Delete'],
+};
+
+function setAssessment(type) {
+  activeAssessment = type === 'pqi' ? 'pqi' : 'plant_manager';
+  try { localStorage.setItem('rdc_admin_assessment', activeAssessment); } catch (_) {}
+  document.getElementById('tab-plant_manager').classList.toggle('active', activeAssessment === 'plant_manager');
+  document.getElementById('tab-pqi').classList.toggle('active', activeAssessment === 'pqi');
+  document.getElementById('sessionsHead').innerHTML =
+    '<tr>' + TABLE_HEADERS[activeAssessment].map(h => `<th>${h}</th>`).join('') + '</tr>';
+  document.getElementById('st-avg-label').textContent =
+    activeAssessment === 'pqi' ? 'Avg Overall (/100)' : 'Avg Score (/300)';
+  renderPqiBanner();
+  updateStats();
+  renderTable();
+}
+
+function sessionsOfActiveType() {
+  return allSessions.filter(s => (s.assessment_type || 'plant_manager') === activeAssessment);
+}
+
+async function loadPqiMaster() {
+  try {
+    const res = await fetch('/api/admin/pqi-master', { headers: { 'X-Admin-Token': adminToken } });
+    if (res.ok) pqiMasterStatus = await res.json();
+  } catch (_) {}
+  renderPqiBanner();
+}
+
+function renderPqiBanner() {
+  const el = document.getElementById('pqiBanner');
+  el.className = 'pqi-banner';
+  el.innerHTML = '';
+  if (activeAssessment !== 'pqi' || !pqiMasterStatus) return;
+  const m = pqiMasterStatus;
+  if (!m.available) {
+    el.className = 'pqi-banner err';
+    el.innerHTML = '<strong>PQI is unavailable</strong> — the master workbook failed validation, so PQI codes '
+      + 'cannot be generated or started. Plant Manager is not affected.<br><small>' + escHtml(m.error || '') + '</small>';
+    return;
+  }
+  el.className = 'pqi-banner warn';
+  el.innerHTML = `Master <strong>${escHtml(m.version)}</strong> (${escHtml(m.status)}) · ${escHtml(m.rubric_version)}`
+    + ` · ${m.srts} SRTs · evaluator ${escHtml(m.evaluator_model)}`
+    + ((m.warnings || []).length ? '<br><small>⚠ ' + m.warnings.map(escHtml).join('<br>⚠ ') + '</small>' : '');
+}
+
 // ─── Login ───────────────────────────────────────────────────────────────────
 async function doLogin() {
   const pw = document.getElementById('pwInput').value;
@@ -518,6 +626,8 @@ window.onload = async () => {
 function showDashboard() {
   document.getElementById('loginWrap').style.display  = 'none';
   document.getElementById('dashboard').style.display  = 'block';
+  setAssessment(activeAssessment);
+  loadPqiMaster();
   loadSessions();
 }
 
@@ -537,11 +647,16 @@ async function loadSessions() {
 }
 
 function updateStats() {
-  const total    = allSessions.length;
-  const done     = allSessions.filter(s => s.status === 'completed').length;
+  const list     = sessionsOfActiveType();
+  const isPqiTab = activeAssessment === 'pqi';
+  const total    = list.length;
+  const done     = list.filter(s => s.status === 'completed').length;
   const inprog   = total - done;
-  const scores   = allSessions.filter(s => typeof s.total_score === 'number').map(s => s.total_score);
-  const avg      = scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : '—';
+  const scores   = isPqiTab
+    ? list.map(s => (s.pqi_headline || {}).overall).filter(v => typeof v === 'number')
+    : list.filter(s => typeof s.total_score === 'number').map(s => s.total_score);
+  const mean     = scores.length ? scores.reduce((a,b)=>a+b,0)/scores.length : null;
+  const avg      = mean === null ? '—' : (isPqiTab ? mean.toFixed(1) : Math.round(mean));
 
   document.getElementById('st-total').textContent  = total;
   document.getElementById('st-done').textContent   = done;
@@ -551,14 +666,15 @@ function updateStats() {
 
 function renderTable() {
   const q   = (document.getElementById('searchInput').value || '').toLowerCase();
+  const base = sessionsOfActiveType();
   const filtered = q
-    ? allSessions.filter(s =>
+    ? base.filter(s =>
         s.candidate_name.toLowerCase().includes(q) ||
         s.plant_location.toLowerCase().includes(q) ||
         // So "external" typed in the search box lists exactly the
         // recruitment sessions.
         (s.candidate_type === 'external' && 'external'.includes(q)))
-    : allSessions;
+    : base;
 
   const body = document.getElementById('sessionsBody');
   body.innerHTML = '';
@@ -592,6 +708,8 @@ function renderTable() {
     const readyCls    = readinessClass(s.readiness);
     const scoreStr    = typeof s.total_score === 'number' ? s.total_score : '—';
     const normStr     = typeof s.normalized === 'number' ? s.normalized.toFixed(1) + '%' : '—';
+    // PQI rows show its four headline scores in place of Score /300 and Normalised %.
+    const scoreCells  = activeAssessment === 'pqi' ? pqiScoreCells(s, readyCls) : null;
 
     // Precise status badge — distinguish in_progress (candidate didn't finish)
     // from processing (pipeline running) from failed (errored) from stuck.
@@ -631,9 +749,9 @@ function renderTable() {
         <td>${escHtml(s.assessment_date)}</td>
         <td title="${escHtml(absTime(s.created_at))}" style="font-size:12px;color:var(--grey-mid);">${escHtml(relTime(s.created_at))}</td>
         <td>${badgeHtml}</td>
-        <td style="font-weight:700;color:var(--blue);">${scoreStr}</td>
+        ${scoreCells !== null ? scoreCells : `<td style="font-weight:700;color:var(--blue);">${scoreStr}</td>
         <td>${normStr}</td>
-        <td class="${readyCls}">${escHtml(s.readiness || '—')}</td>
+        <td class="${readyCls}">${escHtml(s.readiness || '—')}</td>`}
         <td title="Scored: ${s.questions_answered}/30 · Transcripts in DB: ${transcripts}/30">${s.questions_answered} / 30${transcripts > s.questions_answered ? ` <span style="color:#1a7a1a;font-size:10px;">(${transcripts} saved)</span>` : ''}</td>
         <td>
           ${isDone ? `<button class="btn-view" onclick="viewReport('${s.session_id}')">👁 View</button>` : ''}
@@ -664,7 +782,24 @@ function readinessClass(text) {
   if (t.includes('structured'))     return 'ready-mid';    // Ready with Structured Support
   if (t.includes('low potential'))  return 'ready-vlow';   // Low Potential
   if (t.includes('not ready') || t.includes('not yet')) return 'ready-low';  // Not Yet Ready
+  // PQI bands (Candidate_Output_Spec)
+  if (t.includes('high readiness')) return 'ready-high';
+  if (t === 'ready')                return 'ready-pm';
+  if (t.includes('developing'))     return 'ready-dev';
   return '';
+}
+
+function fmt1(v) { return typeof v === 'number' ? v.toFixed(1) : '—'; }
+
+function pqiScoreCells(s, readyCls) {
+  const h = s.pqi_headline || {};
+  const review = h.manual_review ? '<span class="badge-review" title="Manual review required — see the report">Review</span>' : '';
+  const flags  = h.critical_flags ? `<span class="badge-failed" style="margin-left:4px;font-size:10px;" title="Confirmed Critical Flags">${h.critical_flags} flag${h.critical_flags > 1 ? 's' : ''}</span>` : '';
+  return `<td style="font-weight:700;color:var(--blue);">${fmt1(h.overall)}</td>
+        <td>${fmt1(h.technical)}</td>
+        <td>${fmt1(h.business)}</td>
+        <td>${fmt1(h.afi)}</td>
+        <td class="${readyCls}">${escHtml(s.readiness || '—')}${review}${flags}</td>`;
 }
 
 function escHtml(str) {
@@ -702,6 +837,7 @@ async function viewReport(sid) {
     });
     if (!res.ok) { alert('Report not available'); return; }
     const d = await res.json();
+    if (d.assessment_type === 'pqi') { showPqiReport(sid, d.candidate, d.report); return; }
     populateModal(d.candidate, d.report);
     document.getElementById('reportModal').classList.add('show');
   } catch (e) { alert('Error loading report: ' + e.message); }
@@ -761,6 +897,117 @@ function populateModal(cand, r) {
 function closeModal() {
   document.getElementById('reportModal').classList.remove('show');
   currentSid = '';
+}
+
+// ─── PQI report modal ────────────────────────────────────────────────────────
+function pqiModalEl() {
+  let el = document.getElementById('pqiReportModal');
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'modal-bg';
+    el.id = 'pqiReportModal';
+    el.innerHTML = '<div class="modal-box"><button class="modal-close" onclick="closePqiReport()">✕</button>'
+                 + '<div id="pqiReportBody"></div></div>';
+    el.addEventListener('click', (ev) => { if (ev.target === el) closePqiReport(); });
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+function closePqiReport() {
+  pqiModalEl().classList.remove('show');
+  currentSid = '';
+}
+
+function showPqiReport(sid, cand, r) {
+  const e = escHtml;
+  const modal = pqiModalEl();
+  const ready = r.readiness || {};
+  const m = r.master || {};
+  const review = r.second_review || {};
+  const box = (num, lbl, cls) =>
+    `<div class="score-box-sm"><div class="num ${cls || ''}">${num}</div><div class="lbl">${lbl}</div></div>`;
+
+  const comps = (r.competency_scores || []).map(c => {
+    const col = c.score >= 8 ? '#1a7a1a' : c.score >= 6 ? '#0055aa' : c.score >= 4 ? '#cc7700' : '#cc0000';
+    return `<div class="comp-modal-row">
+        <div class="comp-modal-name">${e(c.code)} · ${e(c.name)} <span style="color:#999;font-size:11px;">${e(c.lens)} ×${c.weight}</span></div>
+        <div class="comp-modal-bar"><div class="comp-modal-fill" style="width:${(c.score / 10) * 100}%;background:${col};"></div></div>
+        <div class="comp-modal-score">${fmt1(c.score)}</div>
+      </div>`;
+  }).join('');
+
+  const alerts = []
+  if (ready.manual_review_required) {
+    alerts.push(`<div class="pqi-alert review"><strong>Manual review required</strong><br>${(ready.manual_review_reasons || []).map(e).join('<br>')}</div>`);
+  }
+  if ((ready.caps || []).length) {
+    alerts.push(`<div class="pqi-alert review">Score band <strong>${e(ready.score_band)}</strong>, classification <strong>${e(ready.band)}</strong>:<br>${ready.caps.map(c => e(c.reason)).join('<br>')}</div>`);
+  }
+  if ((r.critical_flags || []).length) {
+    alerts.push(`<div class="pqi-alert flag"><strong>Confirmed Critical Flags</strong><br>${r.critical_flags.map(f =>
+      `${e(f.srt_id)} (Q${f.question_number}) — ${e(f.severity)} / ${e(f.type)}: ${e(f.reason)}`).join('<br>')}</div>`);
+  }
+
+  const items = (list) => (list || []).map(i =>
+    `<li style="margin-bottom:6px;"><strong>${e(i.title)}</strong>${i.gap_type ? ` <span style="color:#999;font-size:11px;">[${e(i.gap_type)}]</span>` : ''}<br>`
+    + `<span style="color:#555;">${e(i.evidence)}</span>${(i.srt_ids || []).length ? ` <span style="color:#999;font-size:11px;">${e(i.srt_ids.join(', '))}</span>` : ''}</li>`).join('');
+
+  const srts = (r.srt_results || []).map(s => `
+    <details class="srt-detail">
+      <summary>Q${s.question_number} · ${e(s.srt_id)} · ${e(s.primary_competency)} ${e(s.competency_name || '')} — score ${s.final_score}${s.critical_failure ? ' · ⚠ Critical Failure' : ''}${s.status === 'blank' ? ' · not answered' : ''}${s.reviewed ? ' · reviewed' : ''}</summary>
+      <div class="body">
+        <p><strong>Situation:</strong> ${e(s.situation)}</p>
+        <p><strong>Response${s.response_capture ? ' (' + e(s.response_capture) + ')' : ''}:</strong> ${s.response ? e(s.response) : '<em>(no response)</em>'}</p>
+        <p>Core ${s.core_response_level} · Lift ${s.excellence_lift} · Decision made: ${e(s.decision_made)}${(s.caps_applied || []).length ? ' · cap applied: ' + e(s.caps_applied.join(', ')) : ''} · AFI ${s.afi_activated ? s.afi_evidence_level + '/5' : 'not scored'} (${e(s.afi_applicability)})</p>
+        ${s.critical_failure ? `<p><strong>Critical Failure</strong> (${e(s.critical_failure_severity)} / ${e(s.critical_failure_type)}): ${e(s.critical_failure_reason)}</p>` : ''}
+        <p><strong>Justification:</strong> ${e((s.score_justification || []).join(' '))}</p>
+        <p><strong>Primary gap:</strong> ${e(s.primary_gap || '')}</p>
+        ${s.first_pass && s.first_pass.final_score !== s.final_score ? `<p><em>Second review changed the score from ${s.first_pass.final_score}.</em></p>` : ''}
+      </div>
+    </details>`).join('');
+
+  document.getElementById('pqiReportBody').innerHTML = `
+    <div class="modal-title">PQI Report: ${e(cand.candidate_name)}</div>
+    <div class="modal-sub">${e(cand.plant_location)} | ${e(cand.assessment_date)} | Master ${e(m.version)} (${e(m.status)}) · ${e(m.rubric_version)} · ${e(r.evaluator_model || '')} | Confidential</div>
+    <div class="score-hero-sm">
+      ${box(fmt1(r.overall_pqi_score), `Overall PQI /100 (max ${r.overall_attainable_max || 90})`)}
+      ${box(fmt1(r.technical_acumen), 'Technical Acumen')}
+      ${box(fmt1(r.business_acumen), 'Business Acumen')}
+      ${box(fmt1(r.anti_firefighting_index), 'Anti-Firefighting' + (r.afi_band ? ' · ' + e(r.afi_band) : ''))}
+      <div class="score-box-sm"><div class="num ${readinessClass(r.overall_readiness)}" style="font-size:15px;">${e(r.overall_readiness || '—')}</div><div class="lbl">Readiness (provisional)</div></div>
+    </div>
+    ${alerts.join('')}
+    <div class="pqi-section"><h4>Competency Profile (/10)</h4>${comps}</div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;">
+      <div class="pqi-section" style="flex:1;min-width:240px;"><h4>Top Strengths</h4><ul style="font-size:13px;padding-left:18px;margin:0;">${items(r.top_strengths)}</ul></div>
+      <div class="pqi-section" style="flex:1;min-width:240px;"><h4>Development Priorities</h4><ul style="font-size:13px;padding-left:18px;margin:0;">${items(r.development_priorities)}</ul></div>
+    </div>
+    <div class="pqi-section"><h4>Development Narrative</h4><div style="font-size:13px;color:#333;white-space:pre-line;">${e(r.development_narrative || '')}</div></div>
+    <div class="pqi-section"><h4>Evaluation Quality Controls</h4><div style="font-size:12.5px;color:#555;">
+      Second review triggers: ${e((review.triggers || []).join(', ').replace(/_/g, ' ') || 'none')} ·
+      SRTs reviewed: ${(review.reviewed_srts || []).length} · score changes: ${(review.changes || []).length} ·
+      consistency check: ${e((r.consistency_check || {}).status || '—')}</div></div>
+    <div class="pqi-section"><h4>SRT Responses and Evaluations</h4>${srts}</div>
+    <div style="text-align:center;margin-top:20px;">
+      <button class="btn btn-primary" onclick="downloadPdfFor('${sid}')">⬇️ Download PDF Report</button>
+      &nbsp;<button class="btn btn-outline" onclick="downloadAudit('${sid}')">⬇️ Evaluation Audit (JSON)</button>
+      &nbsp;<button class="btn btn-outline" onclick="closePqiReport()">Close</button>
+    </div>`;
+  modal.classList.add('show');
+}
+
+async function downloadAudit(sid) {
+  try {
+    const res = await fetch(`/api/admin/session-evaluations/${sid}`, { headers: { 'X-Admin-Token': adminToken } });
+    if (!res.ok) { const err = await res.json(); throw new Error(err.detail); }
+    const blob = new Blob([JSON.stringify(await res.json(), null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `RDC_PQI_Evaluation_Audit_${sid.slice(0, 8)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (err) { alert('Audit download failed: ' + err.message); }
 }
 
 // ─── PDF Download ─────────────────────────────────────────────────────────────
@@ -910,6 +1157,13 @@ async function diagnoseSession(sid, name) {
     diagnosis += `Pipeline cap:     ${d.pipeline_concurrency} concurrent\n`;
     diagnosis += `Scorer model:     ${d.scorer_model || '?'} (max ${d.scorer_max_tokens || '?'} tok)\n`;
     diagnosis += `Report model:     ${d.report_model || '?'} (max ${d.report_max_tokens || '?'} tok)\n`;
+    if (d.pqi) {
+      const p = d.pqi;
+      diagnosis += `PQI evaluations:  ${p.evaluated} evaluated · ${p.blank} blank · ${p.not_yet_evaluated} not yet evaluated · ${p.second_reviewed} second-reviewed\n`;
+      diagnosis += `PQI master:       ${p.master_version} (${(p.master_sha256 || '').slice(0, 12)}) · ${p.rubric_version}\n`;
+      diagnosis += `PQI evaluator:    ${p.evaluator_model || '?'} · ${p.prompt_version || '?'}\n`;
+      if (d.status === 'in_progress') diagnosis += `Time left:        ${Math.round((p.remaining_seconds || 0) / 60)} min\n`;
+    }
     diagnosis += `${'─'.repeat(50)}\n`;
 
     // Interpretation
@@ -1004,7 +1258,8 @@ async function rescoreAllStuck() {
 
 // ─── Re-baseline: FORCE-FULL rescore selected (or all) sessions under v2.5 ────
 async function rescoreValidationBatch() {
-  const completed = allSessions.filter(s => s.status === 'completed');
+  // Only the assessment on the active tab is re-baselined.
+  const completed = sessionsOfActiveType().filter(s => s.status === 'completed');
   if (!completed.length) {
     alert('No completed sessions to re-baseline.');
     return;
@@ -1020,7 +1275,8 @@ async function rescoreValidationBatch() {
   if (raw === null) return;   // cancelled
 
   const names = raw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
-  const body  = names.length ? { names } : {};
+  const ids   = completed.map(s => s.session_id);
+  const body  = names.length ? { names, session_ids: ids } : { session_ids: ids };
   const count = names.length || completed.length;
   const est   = (count * 0.43).toFixed(2);
 
@@ -1074,6 +1330,8 @@ function openAccessCodeModal() {
   document.getElementById('ac-new-code-wrap').style.display = 'none';
   document.getElementById('ac-gen-btn').disabled   = false;
   document.getElementById('ac-gen-btn').innerHTML  = '✨ Generate New 10-Digit Code';
+  // Default to the assessment the dashboard is showing.
+  document.querySelectorAll('input[name="ac-type"]').forEach(r => { r.checked = r.value === activeAssessment; });
   document.getElementById('acModal').classList.add('show');
   loadAccessCodes();
 }
@@ -1082,9 +1340,13 @@ function closeAccessCodeModal() {
   document.getElementById('acModal').classList.remove('show');
 }
 
+const TYPE_LABELS = { plant_manager: 'Plant Manager', pqi: 'Plant Quality Incharge (PQI)' };
+
 async function generateAccessCode() {
   const btn    = document.getElementById('ac-gen-btn');
   const label  = document.getElementById('ac-label').value.trim();
+  const picked = document.querySelector('input[name="ac-type"]:checked');
+  const type   = picked ? picked.value : 'plant_manager';
 
   btn.disabled  = true;
   btn.innerHTML = '⏳ Generating…';
@@ -1093,13 +1355,14 @@ async function generateAccessCode() {
     const res = await fetch('/api/admin/generate-code', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken },
-      body:    JSON.stringify({ label, max_uses: 10 }),
+      body:    JSON.stringify({ label, max_uses: 10, assessment_type: type }),
     });
     if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
     const d = await res.json();
 
     document.getElementById('ac-new-code').textContent = d.code;
     document.getElementById('ac-new-meta').textContent =
+      `${TYPE_LABELS[d.assessment_type] || 'Plant Manager'} · ` +
       `${d.max_uses - d.used_count} of ${d.max_uses} slots available` +
       (d.label ? ` · ${d.label}` : '');
     // Common assessment URL — NEVER includes the code (anti-cheating requirement).
@@ -1156,7 +1419,7 @@ async function loadAccessCodes() {
 
       listEl.innerHTML += `
         <div class="ac-list-row">
-          <div class="ac-list-code">${escHtml(c.code)}</div>
+          <div class="ac-list-code">${escHtml(c.code)}<span class="type-badge ${c.assessment_type === 'pqi' ? 'pqi' : 'pm'}">${c.assessment_type === 'pqi' ? 'PQI' : 'Plant Manager'}</span></div>
           <div style="flex:1;font-size:11px;color:var(--grey-mid);">${label || ''}</div>
           <span class="ac-list-usage ${badgeCls}">${used} / ${max}</span>
           <button class="ac-btn-small-del" onclick="deleteAccessCode('${c.code}')" title="Delete this code">🗑</button>
@@ -1195,6 +1458,7 @@ function openQuickTest() {
   document.getElementById('qt-bar').style.width   = '0%';
   document.getElementById('qt-sid').textContent   = '';
   document.getElementById('qt-start-btn').disabled = false;
+  document.getElementById('qt-type').value = activeAssessment;
   qtSessionId = null;
   document.getElementById('qtModal').classList.add('show');
 }
@@ -1224,7 +1488,8 @@ async function startQuickTest() {
     const res = await fetch('/api/admin/quick-test', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken },
-      body:    JSON.stringify({ candidate_name: name, plant_location: plant }),
+      body:    JSON.stringify({ candidate_name: name, plant_location: plant,
+                                assessment_type: document.getElementById('qt-type').value }),
     });
     if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
     const d = await res.json();

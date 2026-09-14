@@ -16,8 +16,11 @@ from fastapi.responses import Response, RedirectResponse
 from models import (
     CandidateInfo, ScoreRequest, FinalReportRequest, SubmitAllRequest,
     AccessCodeValidate, AccessCodeGenerate, ValidationBatchRequest,
-    IdentityLookup,
+    IdentityLookup, SaveAnswerRequest,
 )
+import assessment_types
+import pqi_service
+from assessment_types import PLANT_MANAGER, PQI
 from identity import resolve_employee, resolve_person, identity_configured
 from question_bank import load_questions, get_session_questions
 from scorer import (
@@ -32,6 +35,7 @@ from database import (
     create_access_code, get_access_code, consume_access_code,
     list_access_codes, delete_access_code,
     auto_fail_stale_processing,
+    find_active_session, list_evaluations,
 )
 from datetime import datetime, timezone
 
@@ -118,6 +122,11 @@ else:
 questions_db = load_questions(EXCEL_PATH)
 client       = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
 
+# The PQI master loads fail-closed: a missing or invalid workbook switches PQI
+# off (codes cannot be generated or started, and the reason is shown in the
+# admin console) while Plant Manager, which never reads it, runs as before.
+pqi_service.load_current_master()
+
 # In-memory cache for active sessions (synced to DB on key events)
 _cache: Dict[str, Any] = {}
 
@@ -160,6 +169,12 @@ async def _rescore_guarded(session_id: str) -> None:
 @app.on_event("startup")
 async def startup():
     init_db()
+    # Recording the PQI master in the database is bookkeeping for rescoring
+    # old attempts; failing to do it must never keep the app from starting.
+    try:
+        pqi_service.register_current_master()
+    except Exception as exc:
+        logger.error("Could not register the PQI master in the database: %s", exc)
 
 
 # ─── Page Routes ─────────────────────────────────────────────────────────────
@@ -244,9 +259,21 @@ def _get(session_id: str) -> dict | None:
 
 # ─── API: Admin — List Sessions ──────────────────────────────────────────────
 @app.get("/api/admin/sessions")
-async def admin_list_sessions(x_admin_token: str = Header(None), x_auth_email: str = Header(None)):
+async def admin_list_sessions(background_tasks: BackgroundTasks,
+                              x_admin_token: str = Header(None), x_auth_email: str = Header(None)):
     if not _admin_identity(x_admin_token, x_auth_email):
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+    # A PQI attempt left open well past its deadline is over. Submit the
+    # answers it saved, so HR gets a result without chasing the candidate.
+    # Plant Manager sessions have no server deadline and are never touched.
+    try:
+        for sid in pqi_service.expired_session_ids():
+            if _begin_processing(sid):
+                background_tasks.add_task(_pipeline_guarded, sid, "pqi-expired")
+                logger.info("PQI attempt %s passed its deadline; submitted with saved answers", sid)
+    except Exception as exc:
+        logger.warning("Expired-PQI sweep failed (non-fatal): %s", exc)
 
     # v4.20 watchdog: sweep stale 'processing' sessions before returning the
     # list. Any session that's been processing >WATCHDOG_TIMEOUT_MINUTES is
@@ -300,7 +327,8 @@ async def get_report(session_id: str, x_admin_token: str = Header(None), x_auth_
     report = session.get("report")
     if not report:
         raise HTTPException(status_code=404, detail="Report not yet generated")
-    return {"candidate": session["candidate"], "report": report, "scores": session.get("scores", {})}
+    return {"candidate": session["candidate"], "report": report, "scores": session.get("scores", {}),
+            "assessment_type": session.get("assessment_type") or PLANT_MANAGER}
 
 # ─── API: Admin — Delete Session ─────────────────────────────────────────────
 @app.delete("/api/admin/session/{session_id}")
@@ -330,6 +358,11 @@ async def admin_quick_test(
         "assessment_date": payload.get("assessment_date",
                                        datetime.date.today().isoformat()),
     }
+    quick_type = assessment_types.normalise(payload.get("assessment_type"))
+    if quick_type is None:
+        raise HTTPException(status_code=400, detail="Unknown assessment type.")
+    if quick_type == PQI:
+        return _start_pqi_quick_test(candidate, background_tasks)
     questions = get_session_questions(questions_db, per_competency=3)
 
     dummy_answer = (
@@ -737,6 +770,7 @@ async def diagnose_session(session_id: str, x_admin_token: str = Header(None), x
         "scorer_max_tokens":   __import__("scorer").SCORER_MAX_TOKENS,
         "report_model":        __import__("report_generator").REPORT_MODEL,
         "report_max_tokens":   __import__("report_generator").REPORT_MAX_TOKENS,
+        **(_pqi_diagnosis(session) if session.get("assessment_type") == PQI else {}),
     }
 
 
@@ -806,10 +840,23 @@ async def admin_generate_code(
     if max_uses < 1 or max_uses > 100:
         raise HTTPException(status_code=400, detail="max_uses must be between 1 and 100")
 
+    code_type = assessment_types.normalise(payload.assessment_type)
+    if code_type is None:
+        raise HTTPException(status_code=400, detail="Unknown assessment type.")
+    if code_type == PQI:
+        try:
+            pqi_service.current_master()
+        except pqi_service.PqiUnavailable as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=f"PQI codes cannot be generated: the PQI master failed validation ({exc}).",
+            )
+
     code   = _fresh_access_code()
-    record = create_access_code(code, label=payload.label or "", max_uses=max_uses)
-    logger.info("Admin generated new access code %s (max_uses=%d, label=%r)",
-                code, max_uses, payload.label or "")
+    record = create_access_code(code, label=payload.label or "", max_uses=max_uses,
+                                assessment_type=code_type)
+    logger.info("Admin generated new access code %s (max_uses=%d, label=%r, type=%s)",
+                code, max_uses, payload.label or "", code_type)
     return record
 
 
@@ -847,11 +894,22 @@ async def validate_code(payload: AccessCodeValidate):
             status_code=410,
             detail=f"This access code has been fully used ({record['used_count']}/{record['max_uses']}). Please request a new one from HR.",
         )
+    # The code alone decides which assessment the candidate takes; there is no
+    # choice to make after this point.
+    code_type = assessment_types.normalise(record.get("assessment_type")) or PLANT_MANAGER
+    if code_type == PQI:
+        try:
+            pqi_service.current_master()
+        except pqi_service.PqiUnavailable:
+            raise HTTPException(status_code=503,
+                                detail="This assessment is not available right now. Please contact HR.")
     return {
         "valid":      True,
         "max_uses":   record["max_uses"],
         "used_count": record["used_count"],
         "remaining":  record["max_uses"] - record["used_count"],
+        "assessment_type":  code_type,
+        "assessment_label": assessment_types.LABELS[code_type],
     }
 
 
@@ -900,9 +958,166 @@ async def identity_lookup(payload: IdentityLookup):
     }
 
 
+# ─── Candidate details (shared by both assessments) ─────────────────────────
+def _candidate_details(candidate: CandidateInfo, kind: str, email: str, resolved: dict) -> dict:
+    """What the session records about who the candidate is, from the resolution result."""
+    person = resolved["person"] if resolved["ok"] else None
+    details = dict(candidate.model_dump())
+    details["captured_email"] = email
+    if person:
+        details["person_id"]      = person.get("person_id")
+        details["employee_code"]  = person.get("employee_code")
+        details["captured_email"] = person.get("email") or email
+        employment = person.get("employment") or {}
+
+        # An outside applicant who types an address the master already holds
+        # IS an employee, whichever tab they clicked, and the record should
+        # say so. Their name and plant then come from the master for the same
+        # reason they do in the employee flow: it is the spelling HR holds,
+        # and a typed one puts a second version of the same person on the
+        # report. The master's location is also better spelled than a plant
+        # name typed under time pressure.
+        if person.get("employee_code"):
+            details["candidate_type"] = "employee"
+            details["candidate_name"] = person.get("full_name") or details.get("candidate_name") or ""
+            details["plant_location"] = employment.get("location") or details.get("plant_location") or ""
+        else:
+            # A genuine external. The typed name is all there is, and it is
+            # what HR will search the dashboard for, so it stands.
+            details["candidate_type"] = "external"
+            details["candidate_name"] = (details.get("candidate_name") or "").strip() or person.get("full_name") or ""
+            details["plant_location"] = (details.get("plant_location") or "").strip()
+    elif kind == "external":
+        # Portal unreachable or not configured. Admitted anyway, per the open
+        # policy above, with nothing invented that we could not confirm.
+        details["candidate_type"] = "external"
+        details["employee_code"]  = None
+        details["candidate_name"] = (details.get("candidate_name") or "").strip()
+        details["plant_location"] = (details.get("plant_location") or "").strip()
+    details.pop("email", None)          # kept as captured_email; not duplicated
+    details.pop("access_code", None)    # never stored with the session
+    details.pop("assessment_type", None)
+    return details
+
+
+# ─── PQI helpers ─────────────────────────────────────────────────────────────
+def _begin_processing(session_id: str) -> bool:
+    """Flip an open attempt to 'processing' ahead of scoring. False if it is not open."""
+    session = _get(session_id)
+    if not session or session.get("status") != "in_progress":
+        return False
+    session.update(status="processing", progress=0, error=None)
+    update_session(session_id, status="processing", progress=0, error=None, processing_started_at=_now_utc())
+    return True
+
+
+def _start_pqi_session(code: str, candidate: CandidateInfo, kind: str, email: str, resolved: dict,
+                       background_tasks: BackgroundTasks):
+    """Start — or resume — a PQI attempt.
+
+    Resuming never uses another place on the access code. The master is
+    checked before anything is written, so an unavailable PQI costs nothing.
+    """
+    try:
+        pqi_service.current_master()
+    except pqi_service.PqiUnavailable:
+        raise HTTPException(
+            status_code=503,
+            detail="This assessment is not available right now. Please contact HR — your access code has not been used.",
+        )
+
+    details = _candidate_details(candidate, kind, email, resolved)
+
+    # One open attempt per candidate. Coming back with the same code and
+    # details — after a dropped connection, a closed tab, another device —
+    # returns the SAME questions and saved answers, and the original deadline
+    # keeps running.
+    active = find_active_session(PQI, details.get("captured_email"))
+    if active:
+        sid, existing = active
+        existing = _cache.setdefault(sid, existing)
+        if pqi_service.remaining_seconds(existing) > 0:
+            logger.info("PQI attempt %s resumed (%ds left)", sid, pqi_service.remaining_seconds(existing))
+            return pqi_service.candidate_payload(sid, existing, resumed=True)
+        if _begin_processing(sid):
+            background_tasks.add_task(_pipeline_guarded, sid, "pqi-expired")
+        # Returned, not raised: raising would discard the background task and
+        # leave the attempt 'processing' with nothing scoring it.
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=409,
+            content={"detail": f"Your {ASSESSMENT_MINUTES}-minute assessment time has ended. "
+                               "The answers you saved have been submitted to HR."},
+            background=background_tasks,
+        )
+
+    consumed = consume_access_code(code)
+    if not consumed:
+        rec = get_access_code(code)
+        if not rec:
+            raise HTTPException(status_code=404, detail="Invalid access code. Please check with HR.")
+        raise HTTPException(
+            status_code=410,
+            detail=f"This access code has been fully used ({rec['used_count']}/{rec['max_uses']}). Please request a new one from HR.",
+        )
+    logger.info("Access code %s consumed (%d/%d used) for PQI", code, consumed["used_count"], consumed["max_uses"])
+
+    session_id, session = pqi_service.create_attempt(details, ASSESSMENT_MINUTES)
+    _cache[session_id] = session
+    return pqi_service.candidate_payload(session_id, session, resumed=False)
+
+
+def _start_pqi_quick_test(candidate: dict, background_tasks: BackgroundTasks):
+    try:
+        session_id, session = pqi_service.create_attempt(dict(candidate), ASSESSMENT_MINUTES)
+    except pqi_service.PqiUnavailable as exc:
+        raise HTTPException(status_code=503, detail=f"PQI is unavailable: {exc}")
+    answer = (
+        "I would hold the load and check the delivery ticket, slump and temperature against the approved mix, "
+        "record the evidence, and inform sales and the customer before placement — no shortcut. Then I would "
+        "find why it happened, correct the batching or supplier control, train the batcher and check the next "
+        "deliveries so it does not recur."
+    )
+    answers = {q["srt_id"]: answer for q in session["questions"]}
+    meta = {srt_id: {"input": "typed", "language": None} for srt_id in answers}
+    session.update(collected_answers=answers, answer_meta=meta, status="processing")
+    _cache[session_id] = session
+    update_session(session_id, status="processing", collected_answers=answers, answer_meta=meta,
+                   processing_started_at=_now_utc())
+    background_tasks.add_task(_pipeline_guarded, session_id, "quick-test")
+    logger.info("Admin PQI quick-test session %s started", session_id)
+    return {"session_id": session_id, "status": "processing", "total": len(session["questions"]),
+            "assessment_type": PQI}
+
+
+def _pqi_diagnosis(session: dict) -> dict:
+    from collections import Counter
+
+    scores = session.get("scores") or {}
+    statuses = Counter((v or {}).get("status") for v in scores.values())
+    return {
+        "assessment_type": PQI,
+        "pqi": {
+            "evaluated":         statuses.get("scored", 0),
+            "blank":             statuses.get("blank", 0),
+            "not_yet_evaluated": len(session.get("questions") or []) - len(scores),
+            "second_reviewed":   sum(1 for v in scores.values() if (v or {}).get("reviewed")),
+            "master_version":    session.get("master_version"),
+            "master_sha256":     session.get("master_sha256"),
+            "rubric_version":    session.get("rubric_version"),
+            "prompt_version":    session.get("prompt_version"),
+            "evaluator_model":   session.get("evaluator_model"),
+            "generation_seed":   session.get("generation_seed"),
+            "generation_info":   session.get("generation_info"),
+            "deadline_at":       session.get("deadline_at"),
+            "remaining_seconds": pqi_service.remaining_seconds(session) if session.get("status") == "in_progress" else 0,
+        },
+    }
+
+
 # ─── API: Start Session ─────────────────────────────────────────────────────
 @app.post("/api/start-session")
-async def start_session(candidate: CandidateInfo):
+async def start_session(candidate: CandidateInfo, background_tasks: BackgroundTasks):
     code = (candidate.access_code or "").strip()
     if not code or not code.isdigit() or len(code) != 10:
         raise HTTPException(status_code=400, detail="A valid 10-digit access code is required.")
@@ -973,6 +1188,13 @@ async def start_session(candidate: CandidateInfo):
                 resolved["reason"],
             )
 
+    # Which assessment this code starts. Only a PQI code takes another path;
+    # a Plant Manager code — every code that existed before PQI — carries on
+    # below exactly as before.
+    code_record = get_access_code(code)
+    if code_record and assessment_types.normalise(code_record.get("assessment_type")) == PQI:
+        return _start_pqi_session(code, candidate, kind, email, resolved, background_tasks)
+
     # Validate + atomically consume the access code
     consumed = consume_access_code(code)
     if not consumed:
@@ -989,41 +1211,7 @@ async def start_session(candidate: CandidateInfo):
         code, consumed["used_count"], consumed["max_uses"],
     )
 
-    person = resolved["person"] if resolved["ok"] else None
-    details = dict(candidate.model_dump())
-    details["captured_email"] = email
-    if person:
-        details["person_id"]      = person.get("person_id")
-        details["employee_code"]  = person.get("employee_code")
-        details["captured_email"] = person.get("email") or email
-        employment = person.get("employment") or {}
-
-        # An outside applicant who types an address the master already holds
-        # IS an employee, whichever tab they clicked, and the record should
-        # say so. Their name and plant then come from the master for the same
-        # reason they do in the employee flow: it is the spelling HR holds,
-        # and a typed one puts a second version of the same person on the
-        # report. The master's location is also better spelled than a plant
-        # name typed under time pressure.
-        if person.get("employee_code"):
-            details["candidate_type"] = "employee"
-            details["candidate_name"] = person.get("full_name") or details.get("candidate_name") or ""
-            details["plant_location"] = employment.get("location") or details.get("plant_location") or ""
-        else:
-            # A genuine external. The typed name is all there is, and it is
-            # what HR will search the dashboard for, so it stands.
-            details["candidate_type"] = "external"
-            details["candidate_name"] = (details.get("candidate_name") or "").strip() or person.get("full_name") or ""
-            details["plant_location"] = (details.get("plant_location") or "").strip()
-    elif kind == "external":
-        # Portal unreachable or not configured. Admitted anyway, per the open
-        # policy above, with nothing invented that we could not confirm.
-        details["candidate_type"] = "external"
-        details["employee_code"]  = None
-        details["candidate_name"] = (details.get("candidate_name") or "").strip()
-        details["plant_location"] = (details.get("plant_location") or "").strip()
-    details.pop("email", None)          # kept as captured_email; not duplicated
-    details.pop("access_code", None)    # never stored with the session
+    details = _candidate_details(candidate, kind, email, resolved)
 
     session_id = str(uuid.uuid4())
     questions  = get_session_questions(questions_db, per_competency=3)
@@ -1162,6 +1350,11 @@ async def process_assessment_async(session_id: str) -> None:
     """
     session = _get(session_id)
     if not session:
+        return
+
+    # PQI has its own pipeline. Plant Manager carries on below, unchanged.
+    if session.get("assessment_type") == PQI:
+        await pqi_service.run_pipeline(session_id, session, client)
         return
 
     try:
@@ -1507,10 +1700,20 @@ async def submit_all(req: SubmitAllRequest, background_tasks: BackgroundTasks):
     if session.get("status") == "processing":
         return {"status": "already_processing"}
 
-    session["collected_answers"] = req.answers
+    answers = req.answers
+    if session.get("assessment_type") == PQI:
+        # The browser's answers are laid over those already saved; a repeated
+        # submit of a finished attempt changes nothing.
+        if session.get("status") == "completed":
+            return {"status": "completed", "total": len(session["questions"])}
+        answers, meta = pqi_service.merge_submission(session, req.answers, req.answer_meta)
+        session["answer_meta"] = meta
+        update_session(req.session_id, answer_meta=meta)
+
+    session["collected_answers"] = answers
     session["status"]            = "processing"
     session["progress"]          = 0
-    update_session(req.session_id, collected_answers=req.answers, status="processing", progress=0,
+    update_session(req.session_id, collected_answers=answers, status="processing", progress=0,
                    processing_started_at=_now_utc())
 
     # Route through the shared pipeline semaphore so 11 candidates hitting
@@ -1563,11 +1766,70 @@ async def download_pdf(session_id: str, x_admin_token: str = Header(None), x_aut
         detail = session.get("pdf_error", "PDF not ready yet")
         raise HTTPException(status_code=404, detail=detail)
     name = session["candidate"]["candidate_name"].replace(" ", "_")
+    prefix = "RDC_PQI" if session.get("assessment_type") == PQI else "RDC_SBCA"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="RDC_SBCA_{name}.pdf"'},
+        headers={"Content-Disposition": f'attachment; filename="{prefix}_{name}.pdf"'},
     )
+
+
+# ─── API: PQI — save each answer as it is written ────────────────────────────
+# Candidate-facing, so NOT under /api/admin. It exposes nothing the candidate
+# did not write, and accepts nothing after the attempt's server-side deadline.
+@app.post("/api/save-answer")
+async def save_answer_endpoint(req: SaveAnswerRequest):
+    session = _get(req.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    try:
+        pqi_service.save_answer(req.session_id, session, req.srt_id, req.text,
+                                {"input": req.input, "language": req.language})
+    except pqi_service.AnswerRejected as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc))
+    return {"saved": True}
+
+
+@app.get("/api/session-state/{session_id}")
+async def session_state(session_id: str):
+    """PQI: the questions, saved answers and time left, so a reopened page resumes."""
+    session = _get(session_id)
+    if not session or session.get("assessment_type") != PQI:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return pqi_service.candidate_payload(session_id, session, resumed=False)
+
+
+# ─── API: Admin — PQI master status and evaluation audit ─────────────────────
+@app.get("/api/admin/pqi-master")
+async def admin_pqi_master(x_admin_token: str = Header(None), x_auth_email: str = Header(None)):
+    if not _admin_identity(x_admin_token, x_auth_email):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return pqi_service.master_status()
+
+
+@app.get("/api/admin/session-evaluations/{session_id}")
+async def admin_session_evaluations(session_id: str, x_admin_token: str = Header(None),
+                                    x_auth_email: str = Header(None)):
+    """Every AI evaluation recorded for a PQI attempt, in order: first pass, reviews, errors."""
+    if not _admin_identity(x_admin_token, x_auth_email):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    session = _get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.get("assessment_type") != PQI:
+        raise HTTPException(status_code=400, detail="An evaluation audit is recorded for PQI attempts only.")
+    return {
+        "session_id":      session_id,
+        "candidate":       session.get("candidate"),
+        "master_version":  session.get("master_version"),
+        "master_sha256":   session.get("master_sha256"),
+        "rubric_version":  session.get("rubric_version"),
+        "prompt_version":  session.get("prompt_version"),
+        "evaluator_model": session.get("evaluator_model"),
+        "generation_seed": session.get("generation_seed"),
+        "generation_info": session.get("generation_info"),
+        "evaluations":     list_evaluations(session_id),
+    }
 
 
 # The old path, kept so an open console tab or a bookmark still works.

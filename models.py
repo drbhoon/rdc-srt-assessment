@@ -39,6 +39,19 @@ class AccessCodeValidate(BaseModel):
 class AccessCodeGenerate(BaseModel):
     label: Optional[str] = None
     max_uses: Optional[int] = 10
+    # Which assessment the code starts. Blank means Plant Manager, so a caller
+    # that predates PQI keeps generating Plant Manager codes.
+    assessment_type: Optional[str] = None
+
+
+class SaveAnswerRequest(BaseModel):
+    # PQI only: each answer is saved as it is written, so a candidate who loses
+    # the connection resumes with their work intact.
+    session_id: str
+    srt_id: str
+    text: str = ""
+    input: Optional[str] = None      # "typed" | "voice"
+    language: Optional[str] = None   # voice recognition language, "en-IN" | "hi-IN"
 
 
 class ScoreRequest(BaseModel):
@@ -57,6 +70,9 @@ class FinalReportRequest(BaseModel):
 class SubmitAllRequest(BaseModel):
     session_id: str
     answers: Dict[str, str]   # { srt_id: transcript }
+    # PQI only — how each answer was captured ({srt_id: {input, language}}).
+    # Plant Manager ignores it.
+    answer_meta: Optional[Dict[str, Any]] = None
 
 
 class ValidationBatchRequest(BaseModel):

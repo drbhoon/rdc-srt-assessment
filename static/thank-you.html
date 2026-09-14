@@ -104,6 +104,13 @@
 </div>
 
 <script>
+  // PQI shares this page; only the assessment's name differs.
+  if (sessionStorage.getItem('rdc_assessment_type') === 'pqi') {
+    const name = 'Plant Quality Incharge (PQI) Situation Based Competency Assessment';
+    document.querySelector('.ty-sub strong').textContent = name;
+    document.querySelector('.ty-footer').textContent = 'RDC ' + name + ' | Confidential';
+  }
+
   // Show candidate info
   const candidate = JSON.parse(sessionStorage.getItem('rdc_candidate') || '{}');
   const info = document.getElementById('candidateInfo');

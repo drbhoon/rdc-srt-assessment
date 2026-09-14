@@ -1,0 +1,1234 @@
+{
+ "0|0.0|False": {
+  "demoted_from": null,
+  "reason": "total 0/300 and weakest competency C7 (0.0) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 0.0
+ },
+ "0|0.0|True": {
+  "demoted_from": null,
+  "reason": "total 0/300 and weakest competency C7 (0.0) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 0.0
+ },
+ "0|4.9|False": {
+  "demoted_from": null,
+  "reason": "total 0/300 and weakest competency C7 (4.9) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 4.9
+ },
+ "0|4.9|True": {
+  "demoted_from": null,
+  "reason": "total 0/300 and weakest competency C7 (4.9) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 4.9
+ },
+ "0|5.0|False": {
+  "demoted_from": null,
+  "reason": "total 0/300 and weakest competency C7 (5.0) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 5.0
+ },
+ "0|5.0|True": {
+  "demoted_from": null,
+  "reason": "total 0/300 and weakest competency C7 (5.0) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 5.0
+ },
+ "0|5.9|False": {
+  "demoted_from": null,
+  "reason": "total 0/300 and weakest competency C7 (5.9) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 5.9
+ },
+ "0|5.9|True": {
+  "demoted_from": null,
+  "reason": "total 0/300 and weakest competency C7 (5.9) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 5.9
+ },
+ "0|6.0|False": {
+  "demoted_from": null,
+  "reason": "total 0/300 and weakest competency C7 (6.0) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 6.0
+ },
+ "0|6.0|True": {
+  "demoted_from": null,
+  "reason": "total 0/300 and weakest competency C7 (6.0) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 6.0
+ },
+ "0|6.4|False": {
+  "demoted_from": null,
+  "reason": "total 0/300 and weakest competency C7 (6.4) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 6.4
+ },
+ "0|6.4|True": {
+  "demoted_from": null,
+  "reason": "total 0/300 and weakest competency C7 (6.4) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 6.4
+ },
+ "0|6.5|False": {
+  "demoted_from": null,
+  "reason": "total 0/300 and weakest competency C7 (6.5) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 6.5
+ },
+ "0|6.5|True": {
+  "demoted_from": null,
+  "reason": "total 0/300 and weakest competency C7 (6.5) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 6.5
+ },
+ "0|9.0|False": {
+  "demoted_from": null,
+  "reason": "total 0/300 and weakest competency C0 (9.0) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C0",
+  "weakest_score": 9.0
+ },
+ "0|9.0|True": {
+  "demoted_from": null,
+  "reason": "total 0/300 and weakest competency C0 (9.0) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C0",
+  "weakest_score": 9.0
+ },
+ "149.9|0.0|False": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (0.0) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 0.0
+ },
+ "149.9|0.0|True": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (0.0) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 0.0
+ },
+ "149.9|4.9|False": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (4.9) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 4.9
+ },
+ "149.9|4.9|True": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (4.9) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 4.9
+ },
+ "149.9|5.0|False": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (5.0) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 5.0
+ },
+ "149.9|5.0|True": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (5.0) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 5.0
+ },
+ "149.9|5.9|False": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (5.9) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 5.9
+ },
+ "149.9|5.9|True": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (5.9) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 5.9
+ },
+ "149.9|6.0|False": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (6.0) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 6.0
+ },
+ "149.9|6.0|True": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (6.0) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 6.0
+ },
+ "149.9|6.4|False": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (6.4) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 6.4
+ },
+ "149.9|6.4|True": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (6.4) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 6.4
+ },
+ "149.9|6.5|False": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (6.5) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 6.5
+ },
+ "149.9|6.5|True": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (6.5) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 6.5
+ },
+ "149.9|9.0|False": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C0 (9.0) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C0",
+  "weakest_score": 9.0
+ },
+ "149.9|9.0|True": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C0 (9.0) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C0",
+  "weakest_score": 9.0
+ },
+ "150|0.0|False": {
+  "demoted_from": "Ready with Structured Support",
+  "reason": "total 150/300 qualifies for 'Ready with Structured Support', but C7 (0.0) is below that tier's 5.0 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 0.0
+ },
+ "150|0.0|True": {
+  "demoted_from": "Ready with Structured Support",
+  "reason": "total 150/300 qualifies for 'Ready with Structured Support', but C7 (0.0) is below that tier's 5.0 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 0.0
+ },
+ "150|4.9|False": {
+  "demoted_from": "Ready with Structured Support",
+  "reason": "total 150/300 qualifies for 'Ready with Structured Support', but C7 (4.9) is below that tier's 5.0 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 4.9
+ },
+ "150|4.9|True": {
+  "demoted_from": "Ready with Structured Support",
+  "reason": "total 150/300 qualifies for 'Ready with Structured Support', but C7 (4.9) is below that tier's 5.0 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 4.9
+ },
+ "150|5.0|False": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (5.0) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.0
+ },
+ "150|5.0|True": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (5.0) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.0
+ },
+ "150|5.9|False": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (5.9) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.9
+ },
+ "150|5.9|True": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (5.9) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.9
+ },
+ "150|6.0|False": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (6.0) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.0
+ },
+ "150|6.0|True": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (6.0) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.0
+ },
+ "150|6.4|False": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (6.4) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.4
+ },
+ "150|6.4|True": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (6.4) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.4
+ },
+ "150|6.5|False": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (6.5) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.5
+ },
+ "150|6.5|True": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C7 (6.5) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.5
+ },
+ "150|9.0|False": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C0 (9.0) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C0",
+  "weakest_score": 9.0
+ },
+ "150|9.0|True": {
+  "demoted_from": null,
+  "reason": "total 150/300 and weakest competency C0 (9.0) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C0",
+  "weakest_score": 9.0
+ },
+ "209.9|0.0|False": {
+  "demoted_from": "Ready with Structured Support",
+  "reason": "total 210/300 qualifies for 'Ready with Structured Support', but C7 (0.0) is below that tier's 5.0 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 0.0
+ },
+ "209.9|0.0|True": {
+  "demoted_from": "Ready with Structured Support",
+  "reason": "total 210/300 qualifies for 'Ready with Structured Support', but C7 (0.0) is below that tier's 5.0 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 0.0
+ },
+ "209.9|4.9|False": {
+  "demoted_from": "Ready with Structured Support",
+  "reason": "total 210/300 qualifies for 'Ready with Structured Support', but C7 (4.9) is below that tier's 5.0 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 4.9
+ },
+ "209.9|4.9|True": {
+  "demoted_from": "Ready with Structured Support",
+  "reason": "total 210/300 qualifies for 'Ready with Structured Support', but C7 (4.9) is below that tier's 5.0 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 4.9
+ },
+ "209.9|5.0|False": {
+  "demoted_from": null,
+  "reason": "total 210/300 and weakest competency C7 (5.0) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.0
+ },
+ "209.9|5.0|True": {
+  "demoted_from": null,
+  "reason": "total 210/300 and weakest competency C7 (5.0) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.0
+ },
+ "209.9|5.9|False": {
+  "demoted_from": null,
+  "reason": "total 210/300 and weakest competency C7 (5.9) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.9
+ },
+ "209.9|5.9|True": {
+  "demoted_from": null,
+  "reason": "total 210/300 and weakest competency C7 (5.9) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.9
+ },
+ "209.9|6.0|False": {
+  "demoted_from": null,
+  "reason": "total 210/300 and weakest competency C7 (6.0) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.0
+ },
+ "209.9|6.0|True": {
+  "demoted_from": null,
+  "reason": "total 210/300 and weakest competency C7 (6.0) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.0
+ },
+ "209.9|6.4|False": {
+  "demoted_from": null,
+  "reason": "total 210/300 and weakest competency C7 (6.4) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.4
+ },
+ "209.9|6.4|True": {
+  "demoted_from": null,
+  "reason": "total 210/300 and weakest competency C7 (6.4) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.4
+ },
+ "209.9|6.5|False": {
+  "demoted_from": null,
+  "reason": "total 210/300 and weakest competency C7 (6.5) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.5
+ },
+ "209.9|6.5|True": {
+  "demoted_from": null,
+  "reason": "total 210/300 and weakest competency C7 (6.5) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.5
+ },
+ "209.9|9.0|False": {
+  "demoted_from": null,
+  "reason": "total 210/300 and weakest competency C0 (9.0) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C0",
+  "weakest_score": 9.0
+ },
+ "209.9|9.0|True": {
+  "demoted_from": null,
+  "reason": "total 210/300 and weakest competency C0 (9.0) qualify for this tier",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C0",
+  "weakest_score": 9.0
+ },
+ "210|0.0|False": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 210/300 qualifies for 'Ready to be Plant Manager', but C7 (0.0) is below that tier's 6.0 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 0.0
+ },
+ "210|0.0|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 210/300 qualifies for 'Ready to be Plant Manager', but C7 (0.0) is below that tier's 6.0 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 0.0
+ },
+ "210|4.9|False": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 210/300 qualifies for 'Ready to be Plant Manager', but C7 (4.9) is below that tier's 6.0 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 4.9
+ },
+ "210|4.9|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 210/300 qualifies for 'Ready to be Plant Manager', but C7 (4.9) is below that tier's 6.0 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 4.9
+ },
+ "210|5.0|False": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 210/300 qualifies for 'Ready to be Plant Manager', but C7 (5.0) is below that tier's 6.0 competency floor",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.0
+ },
+ "210|5.0|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 210/300 qualifies for 'Ready to be Plant Manager', but C7 (5.0) is below that tier's 6.0 competency floor",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.0
+ },
+ "210|5.9|False": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 210/300 qualifies for 'Ready to be Plant Manager', but C7 (5.9) is below that tier's 6.0 competency floor",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.9
+ },
+ "210|5.9|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 210/300 qualifies for 'Ready to be Plant Manager', but C7 (5.9) is below that tier's 6.0 competency floor",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.9
+ },
+ "210|6.0|False": {
+  "demoted_from": null,
+  "reason": "total 210/300 and weakest competency C7 (6.0) qualify for this tier",
+  "tier": "Ready to be Plant Manager",
+  "weakest_competency": "C7",
+  "weakest_score": 6.0
+ },
+ "210|6.0|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "INTEGRITY OVERRIDE — would have been 'Ready to be Plant Manager' on score, but a severe integrity concern caps readiness here pending manager review: evidence",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.0
+ },
+ "210|6.4|False": {
+  "demoted_from": null,
+  "reason": "total 210/300 and weakest competency C7 (6.4) qualify for this tier",
+  "tier": "Ready to be Plant Manager",
+  "weakest_competency": "C7",
+  "weakest_score": 6.4
+ },
+ "210|6.4|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "INTEGRITY OVERRIDE — would have been 'Ready to be Plant Manager' on score, but a severe integrity concern caps readiness here pending manager review: evidence",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.4
+ },
+ "210|6.5|False": {
+  "demoted_from": null,
+  "reason": "total 210/300 and weakest competency C7 (6.5) qualify for this tier",
+  "tier": "Ready to be Plant Manager",
+  "weakest_competency": "C7",
+  "weakest_score": 6.5
+ },
+ "210|6.5|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "INTEGRITY OVERRIDE — would have been 'Ready to be Plant Manager' on score, but a severe integrity concern caps readiness here pending manager review: evidence",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.5
+ },
+ "210|9.0|False": {
+  "demoted_from": null,
+  "reason": "total 210/300 and weakest competency C0 (9.0) qualify for this tier",
+  "tier": "Ready to be Plant Manager",
+  "weakest_competency": "C0",
+  "weakest_score": 9.0
+ },
+ "210|9.0|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "INTEGRITY OVERRIDE — would have been 'Ready to be Plant Manager' on score, but a severe integrity concern caps readiness here pending manager review: evidence",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C0",
+  "weakest_score": 9.0
+ },
+ "250.9|0.0|False": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 251/300 qualifies for 'Ready to be Plant Manager', but C7 (0.0) is below that tier's 6.0 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 0.0
+ },
+ "250.9|0.0|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 251/300 qualifies for 'Ready to be Plant Manager', but C7 (0.0) is below that tier's 6.0 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 0.0
+ },
+ "250.9|4.9|False": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 251/300 qualifies for 'Ready to be Plant Manager', but C7 (4.9) is below that tier's 6.0 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 4.9
+ },
+ "250.9|4.9|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 251/300 qualifies for 'Ready to be Plant Manager', but C7 (4.9) is below that tier's 6.0 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 4.9
+ },
+ "250.9|5.0|False": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 251/300 qualifies for 'Ready to be Plant Manager', but C7 (5.0) is below that tier's 6.0 competency floor",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.0
+ },
+ "250.9|5.0|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 251/300 qualifies for 'Ready to be Plant Manager', but C7 (5.0) is below that tier's 6.0 competency floor",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.0
+ },
+ "250.9|5.9|False": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 251/300 qualifies for 'Ready to be Plant Manager', but C7 (5.9) is below that tier's 6.0 competency floor",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.9
+ },
+ "250.9|5.9|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 251/300 qualifies for 'Ready to be Plant Manager', but C7 (5.9) is below that tier's 6.0 competency floor",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.9
+ },
+ "250.9|6.0|False": {
+  "demoted_from": null,
+  "reason": "total 251/300 and weakest competency C7 (6.0) qualify for this tier",
+  "tier": "Ready to be Plant Manager",
+  "weakest_competency": "C7",
+  "weakest_score": 6.0
+ },
+ "250.9|6.0|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "INTEGRITY OVERRIDE — would have been 'Ready to be Plant Manager' on score, but a severe integrity concern caps readiness here pending manager review: evidence",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.0
+ },
+ "250.9|6.4|False": {
+  "demoted_from": null,
+  "reason": "total 251/300 and weakest competency C7 (6.4) qualify for this tier",
+  "tier": "Ready to be Plant Manager",
+  "weakest_competency": "C7",
+  "weakest_score": 6.4
+ },
+ "250.9|6.4|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "INTEGRITY OVERRIDE — would have been 'Ready to be Plant Manager' on score, but a severe integrity concern caps readiness here pending manager review: evidence",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.4
+ },
+ "250.9|6.5|False": {
+  "demoted_from": null,
+  "reason": "total 251/300 and weakest competency C7 (6.5) qualify for this tier",
+  "tier": "Ready to be Plant Manager",
+  "weakest_competency": "C7",
+  "weakest_score": 6.5
+ },
+ "250.9|6.5|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "INTEGRITY OVERRIDE — would have been 'Ready to be Plant Manager' on score, but a severe integrity concern caps readiness here pending manager review: evidence",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.5
+ },
+ "250.9|9.0|False": {
+  "demoted_from": null,
+  "reason": "total 251/300 and weakest competency C0 (9.0) qualify for this tier",
+  "tier": "Ready to be Plant Manager",
+  "weakest_competency": "C0",
+  "weakest_score": 9.0
+ },
+ "250.9|9.0|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "INTEGRITY OVERRIDE — would have been 'Ready to be Plant Manager' on score, but a severe integrity concern caps readiness here pending manager review: evidence",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C0",
+  "weakest_score": 9.0
+ },
+ "250|0.0|False": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 250/300 qualifies for 'Ready to be Plant Manager', but C7 (0.0) is below that tier's 6.0 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 0.0
+ },
+ "250|0.0|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 250/300 qualifies for 'Ready to be Plant Manager', but C7 (0.0) is below that tier's 6.0 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 0.0
+ },
+ "250|4.9|False": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 250/300 qualifies for 'Ready to be Plant Manager', but C7 (4.9) is below that tier's 6.0 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 4.9
+ },
+ "250|4.9|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 250/300 qualifies for 'Ready to be Plant Manager', but C7 (4.9) is below that tier's 6.0 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 4.9
+ },
+ "250|5.0|False": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 250/300 qualifies for 'Ready to be Plant Manager', but C7 (5.0) is below that tier's 6.0 competency floor",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.0
+ },
+ "250|5.0|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 250/300 qualifies for 'Ready to be Plant Manager', but C7 (5.0) is below that tier's 6.0 competency floor",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.0
+ },
+ "250|5.9|False": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 250/300 qualifies for 'Ready to be Plant Manager', but C7 (5.9) is below that tier's 6.0 competency floor",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.9
+ },
+ "250|5.9|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "total 250/300 qualifies for 'Ready to be Plant Manager', but C7 (5.9) is below that tier's 6.0 competency floor",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.9
+ },
+ "250|6.0|False": {
+  "demoted_from": null,
+  "reason": "total 250/300 and weakest competency C7 (6.0) qualify for this tier",
+  "tier": "Ready to be Plant Manager",
+  "weakest_competency": "C7",
+  "weakest_score": 6.0
+ },
+ "250|6.0|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "INTEGRITY OVERRIDE — would have been 'Ready to be Plant Manager' on score, but a severe integrity concern caps readiness here pending manager review: evidence",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.0
+ },
+ "250|6.4|False": {
+  "demoted_from": null,
+  "reason": "total 250/300 and weakest competency C7 (6.4) qualify for this tier",
+  "tier": "Ready to be Plant Manager",
+  "weakest_competency": "C7",
+  "weakest_score": 6.4
+ },
+ "250|6.4|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "INTEGRITY OVERRIDE — would have been 'Ready to be Plant Manager' on score, but a severe integrity concern caps readiness here pending manager review: evidence",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.4
+ },
+ "250|6.5|False": {
+  "demoted_from": null,
+  "reason": "total 250/300 and weakest competency C7 (6.5) qualify for this tier",
+  "tier": "Ready to be Plant Manager",
+  "weakest_competency": "C7",
+  "weakest_score": 6.5
+ },
+ "250|6.5|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "INTEGRITY OVERRIDE — would have been 'Ready to be Plant Manager' on score, but a severe integrity concern caps readiness here pending manager review: evidence",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.5
+ },
+ "250|9.0|False": {
+  "demoted_from": null,
+  "reason": "total 250/300 and weakest competency C0 (9.0) qualify for this tier",
+  "tier": "Ready to be Plant Manager",
+  "weakest_competency": "C0",
+  "weakest_score": 9.0
+ },
+ "250|9.0|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "INTEGRITY OVERRIDE — would have been 'Ready to be Plant Manager' on score, but a severe integrity concern caps readiness here pending manager review: evidence",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C0",
+  "weakest_score": 9.0
+ },
+ "251|0.0|False": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "total 251/300 qualifies for 'Ready for Higher Responsibility', but C7 (0.0) is below that tier's 6.5 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 0.0
+ },
+ "251|0.0|True": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "total 251/300 qualifies for 'Ready for Higher Responsibility', but C7 (0.0) is below that tier's 6.5 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 0.0
+ },
+ "251|4.9|False": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "total 251/300 qualifies for 'Ready for Higher Responsibility', but C7 (4.9) is below that tier's 6.5 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 4.9
+ },
+ "251|4.9|True": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "total 251/300 qualifies for 'Ready for Higher Responsibility', but C7 (4.9) is below that tier's 6.5 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 4.9
+ },
+ "251|5.0|False": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "total 251/300 qualifies for 'Ready for Higher Responsibility', but C7 (5.0) is below that tier's 6.5 competency floor",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.0
+ },
+ "251|5.0|True": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "total 251/300 qualifies for 'Ready for Higher Responsibility', but C7 (5.0) is below that tier's 6.5 competency floor",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.0
+ },
+ "251|5.9|False": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "total 251/300 qualifies for 'Ready for Higher Responsibility', but C7 (5.9) is below that tier's 6.5 competency floor",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.9
+ },
+ "251|5.9|True": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "total 251/300 qualifies for 'Ready for Higher Responsibility', but C7 (5.9) is below that tier's 6.5 competency floor",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.9
+ },
+ "251|6.0|False": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "total 251/300 qualifies for 'Ready for Higher Responsibility', but C7 (6.0) is below that tier's 6.5 competency floor",
+  "tier": "Ready to be Plant Manager",
+  "weakest_competency": "C7",
+  "weakest_score": 6.0
+ },
+ "251|6.0|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "INTEGRITY OVERRIDE — would have been 'Ready to be Plant Manager' on score, but a severe integrity concern caps readiness here pending manager review: evidence",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.0
+ },
+ "251|6.4|False": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "total 251/300 qualifies for 'Ready for Higher Responsibility', but C7 (6.4) is below that tier's 6.5 competency floor",
+  "tier": "Ready to be Plant Manager",
+  "weakest_competency": "C7",
+  "weakest_score": 6.4
+ },
+ "251|6.4|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "INTEGRITY OVERRIDE — would have been 'Ready to be Plant Manager' on score, but a severe integrity concern caps readiness here pending manager review: evidence",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.4
+ },
+ "251|6.5|False": {
+  "demoted_from": null,
+  "reason": "total 251/300 and weakest competency C7 (6.5) qualify for this tier",
+  "tier": "Ready for Higher Responsibility",
+  "weakest_competency": "C7",
+  "weakest_score": 6.5
+ },
+ "251|6.5|True": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "INTEGRITY OVERRIDE — would have been 'Ready for Higher Responsibility' on score, but a severe integrity concern caps readiness here pending manager review: evidence",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.5
+ },
+ "251|9.0|False": {
+  "demoted_from": null,
+  "reason": "total 251/300 and weakest competency C0 (9.0) qualify for this tier",
+  "tier": "Ready for Higher Responsibility",
+  "weakest_competency": "C0",
+  "weakest_score": 9.0
+ },
+ "251|9.0|True": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "INTEGRITY OVERRIDE — would have been 'Ready for Higher Responsibility' on score, but a severe integrity concern caps readiness here pending manager review: evidence",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C0",
+  "weakest_score": 9.0
+ },
+ "270|0.0|False": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "total 270/300 qualifies for 'Ready for Higher Responsibility', but C7 (0.0) is below that tier's 6.5 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 0.0
+ },
+ "270|0.0|True": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "total 270/300 qualifies for 'Ready for Higher Responsibility', but C7 (0.0) is below that tier's 6.5 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 0.0
+ },
+ "270|4.9|False": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "total 270/300 qualifies for 'Ready for Higher Responsibility', but C7 (4.9) is below that tier's 6.5 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 4.9
+ },
+ "270|4.9|True": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "total 270/300 qualifies for 'Ready for Higher Responsibility', but C7 (4.9) is below that tier's 6.5 competency floor",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 4.9
+ },
+ "270|5.0|False": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "total 270/300 qualifies for 'Ready for Higher Responsibility', but C7 (5.0) is below that tier's 6.5 competency floor",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.0
+ },
+ "270|5.0|True": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "total 270/300 qualifies for 'Ready for Higher Responsibility', but C7 (5.0) is below that tier's 6.5 competency floor",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.0
+ },
+ "270|5.9|False": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "total 270/300 qualifies for 'Ready for Higher Responsibility', but C7 (5.9) is below that tier's 6.5 competency floor",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.9
+ },
+ "270|5.9|True": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "total 270/300 qualifies for 'Ready for Higher Responsibility', but C7 (5.9) is below that tier's 6.5 competency floor",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 5.9
+ },
+ "270|6.0|False": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "total 270/300 qualifies for 'Ready for Higher Responsibility', but C7 (6.0) is below that tier's 6.5 competency floor",
+  "tier": "Ready to be Plant Manager",
+  "weakest_competency": "C7",
+  "weakest_score": 6.0
+ },
+ "270|6.0|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "INTEGRITY OVERRIDE — would have been 'Ready to be Plant Manager' on score, but a severe integrity concern caps readiness here pending manager review: evidence",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.0
+ },
+ "270|6.4|False": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "total 270/300 qualifies for 'Ready for Higher Responsibility', but C7 (6.4) is below that tier's 6.5 competency floor",
+  "tier": "Ready to be Plant Manager",
+  "weakest_competency": "C7",
+  "weakest_score": 6.4
+ },
+ "270|6.4|True": {
+  "demoted_from": "Ready to be Plant Manager",
+  "reason": "INTEGRITY OVERRIDE — would have been 'Ready to be Plant Manager' on score, but a severe integrity concern caps readiness here pending manager review: evidence",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.4
+ },
+ "270|6.5|False": {
+  "demoted_from": null,
+  "reason": "total 270/300 and weakest competency C7 (6.5) qualify for this tier",
+  "tier": "Ready for Higher Responsibility",
+  "weakest_competency": "C7",
+  "weakest_score": 6.5
+ },
+ "270|6.5|True": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "INTEGRITY OVERRIDE — would have been 'Ready for Higher Responsibility' on score, but a severe integrity concern caps readiness here pending manager review: evidence",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C7",
+  "weakest_score": 6.5
+ },
+ "270|9.0|False": {
+  "demoted_from": null,
+  "reason": "total 270/300 and weakest competency C0 (9.0) qualify for this tier",
+  "tier": "Ready for Higher Responsibility",
+  "weakest_competency": "C0",
+  "weakest_score": 9.0
+ },
+ "270|9.0|True": {
+  "demoted_from": "Ready for Higher Responsibility",
+  "reason": "INTEGRITY OVERRIDE — would have been 'Ready for Higher Responsibility' on score, but a severe integrity concern caps readiness here pending manager review: evidence",
+  "tier": "Ready with Structured Support",
+  "weakest_competency": "C0",
+  "weakest_score": 9.0
+ },
+ "89.9|0.0|False": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (0.0) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 0.0
+ },
+ "89.9|0.0|True": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (0.0) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 0.0
+ },
+ "89.9|4.9|False": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (4.9) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 4.9
+ },
+ "89.9|4.9|True": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (4.9) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 4.9
+ },
+ "89.9|5.0|False": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (5.0) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 5.0
+ },
+ "89.9|5.0|True": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (5.0) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 5.0
+ },
+ "89.9|5.9|False": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (5.9) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 5.9
+ },
+ "89.9|5.9|True": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (5.9) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 5.9
+ },
+ "89.9|6.0|False": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (6.0) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 6.0
+ },
+ "89.9|6.0|True": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (6.0) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 6.0
+ },
+ "89.9|6.4|False": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (6.4) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 6.4
+ },
+ "89.9|6.4|True": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (6.4) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 6.4
+ },
+ "89.9|6.5|False": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (6.5) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 6.5
+ },
+ "89.9|6.5|True": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (6.5) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C7",
+  "weakest_score": 6.5
+ },
+ "89.9|9.0|False": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C0 (9.0) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C0",
+  "weakest_score": 9.0
+ },
+ "89.9|9.0|True": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C0 (9.0) qualify for this tier",
+  "tier": "Low Potential",
+  "weakest_competency": "C0",
+  "weakest_score": 9.0
+ },
+ "90|0.0|False": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (0.0) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 0.0
+ },
+ "90|0.0|True": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (0.0) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 0.0
+ },
+ "90|4.9|False": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (4.9) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 4.9
+ },
+ "90|4.9|True": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (4.9) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 4.9
+ },
+ "90|5.0|False": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (5.0) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 5.0
+ },
+ "90|5.0|True": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (5.0) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 5.0
+ },
+ "90|5.9|False": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (5.9) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 5.9
+ },
+ "90|5.9|True": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (5.9) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 5.9
+ },
+ "90|6.0|False": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (6.0) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 6.0
+ },
+ "90|6.0|True": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (6.0) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 6.0
+ },
+ "90|6.4|False": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (6.4) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 6.4
+ },
+ "90|6.4|True": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (6.4) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 6.4
+ },
+ "90|6.5|False": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (6.5) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 6.5
+ },
+ "90|6.5|True": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C7 (6.5) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C7",
+  "weakest_score": 6.5
+ },
+ "90|9.0|False": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C0 (9.0) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C0",
+  "weakest_score": 9.0
+ },
+ "90|9.0|True": {
+  "demoted_from": null,
+  "reason": "total 90/300 and weakest competency C0 (9.0) qualify for this tier",
+  "tier": "Not Yet Ready",
+  "weakest_competency": "C0",
+  "weakest_score": 9.0
+ }
+}

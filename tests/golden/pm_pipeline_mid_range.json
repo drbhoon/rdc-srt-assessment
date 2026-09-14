@@ -1,0 +1,1918 @@
+{
+ "claude_calls": [
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "CR-07",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "996376d35f6af67454f19d127d33ae079c86bbc7ebc5f1e3c4b01d0e89238641"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "FK-02",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "b591e3da1952e7ce6b1954d883382344d2284aacfd46a2a895974deacccd26fc"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "PM-04",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "323640331b5dd272bdb2fc07e68a158b95d012d4571603dc225244b8a31e8c68"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "TO-03",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "3cd6673f8a77480002a7d023d3d8122d92c9c9862c2d77eafe19491a9befe453"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "CO-08",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "3136bf9d5ccfb9f5ae16bf0a7d4817f944ec71d40992800559b24443bc83ed84"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "TO-04",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "5cc4234c38482abc4b0da22c111bc8e8f20c0eea5f0705ec0916eb4fedd1a2ff"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "IN-04",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "fa7a5c1b23384db1b9618eb99aafcd51ec9b780fbf9eeb4260700fc28cc1c57b"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "CR-09",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "3227e78d080886d6db28fcf443747795bf48b1a53ae7e2bb384e3132a103a804"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "TO-02",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "139d92eeaaa8d8acf2ffec0677781b4158b107294ce96a79ca4e62d71a442016"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "IN-10",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "1b06b9dc7145aa992fecefbb6b145e1d82bc07df7bddf8e1e20c79a1b1b2eb4b"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "FK-07",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "5357f4e68887e99ed6f9c0e3e3fb7eb27761d7b413039c92790dec1f35cc0ebd"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "VM-08",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "77cc3c31cc5556afc03f92b21dd451fdfdbdffc7f9daf5185f03463e41a1a983"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "SO-06",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "e769f181032665d7b81d3897e94c57bcd7281a0de4b8f9168c55888d88252852"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "FK-04",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "4d349baf8fe9a501038fd630de55f133787954f2e87c7509be36c61193d5cd4b"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "IN-06",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "0b5b3efa78b73f9c39fb3fbbb82c023d3551bea295b86623993388b722f722c1"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "CA-02",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "64887ce4e71e5f3039fe201b07de79f7027514bdf15d6a15ac3253b6eb97cbfb"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "CR-04",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "1d2bd4be57d7ed04500bc7de2ae21ff7e27cf896f9bb17a122b91498698ec211"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "CA-08",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "757071ec3a16518929f480c52c997ea83dbb1e7a4adc17aa0cc5c9cfde9c6944"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "PL-05",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "ede1f212c136b188ce4b0384eed12ee6b12773115d9b4104cf8eb2c4099ccc46"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "VM-06",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "daa59219e0be92cb20a77982af30ed785ddbc3459e53ab6430a6fc1255d154fe"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "VM-04",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "48c117eaf93cae6751cfafab68373d5fac34f66096714235d86d06edf2a05439"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "CO-09",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "fca81040ccef09268f8458d93ab8475ebf9b96acd25171f958bc3f50ed9ad5d7"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "PM-08",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "ae02d26e7e5904e89799c93e15b68d76aa9c32866cf4aab1755528acb94b8af0"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "PL-10",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "e4e9ae6315c943c4b62b2116d2175e13d4dad2e1a5806c5256171e79c3aa5a48"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "SO-08",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "4fea4d7494216c89c8b811c75d91658c1b1036267bc9d79e678b669e3348e55d"
+  },
+  {
+   "instruction": "Score this SRT response. Respond with ONLY a valid JSON object — no prose, no markdown fences. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 2048,
+   "mode": "score_one",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": "CA-05",
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "77a0ef14b23d5c8999a9e968aa0bc8a94e223de6583f37761b6622c566a3f58a"
+  },
+  {
+   "instruction": "Generate the final assessment report. All 30 candidate transcripts are included in the results array — analyze behavioral patterns across ALL responses holistically. Identify cross-competency signals (e.g., a Cost question response may reveal Communication or Integrity traits). Ground every observation in specific phrases from the candidate's actual words. Apply RMC India operational context (SARTAJ, batching plant, transit mixers, monsoon, vendor/contractor dynamics). You MUST respond with ONLY a valid JSON object — no prose, no markdown, no explanation before or after. Start with '{' and end with '}'.",
+   "later_messages": [
+    {
+     "content": "{",
+     "role": "assistant"
+    }
+   ],
+   "max_tokens": 16000,
+   "mode": "final_report",
+   "model": "claude-haiku-4-5",
+   "other_arguments": [],
+   "srt_id": null,
+   "system": [
+    {
+     "cache_control": {
+      "type": "ephemeral"
+     },
+     "text_sha256": "b4c646fbe780e6dce86e152087d97add935c371169595390ce91b4acdba6e01a",
+     "type": "text"
+    }
+   ],
+   "user_sha256": "0947120b4ad353d443638dfe67d326bbd5554fb57a8d81f8460e5b7e94724840"
+  }
+ ],
+ "error": null,
+ "pdf_error": null,
+ "pdf_sha256": "ab7dfb9a3dee6788e105f7952545d4b14288c131f14d3c1a61df4a71f6a55aa0",
+ "progress": 30,
+ "report": {
+  "base_normalized_out_of_100": 54.7,
+  "base_score_out_of_300": 164.0,
+  "behavioral_profile": {
+   "accountability_stance": "Owns outcomes",
+   "communication_style": "Direct",
+   "decision_making_approach": "Data first",
+   "leadership_orientation": "Hands-on",
+   "stress_response_pattern": "Calm"
+  },
+  "candidate_name": "Test Candidate & Sons",
+  "coaching_plan_30_60_90": {
+   "30_days": [
+    "a"
+   ],
+   "60_days": [
+    "b"
+   ],
+   "90_days": [
+    "c"
+   ]
+  },
+  "competency_narratives": {
+   "Communication & Assertiveness": "Narrative for Communication & Assertiveness & <evidence>.",
+   "Cost & Resource Responsibility": "Narrative for Cost & Resource Responsibility & <evidence>.",
+   "Customer Orientation & Relationship Handling": "Narrative for Customer Orientation & Relationship Handling & <evidence>.",
+   "Functional Knowledge & Multiskilling": "Narrative for Functional Knowledge & Multiskilling & <evidence>.",
+   "Integrity & Trust": "Narrative for Integrity & Trust & <evidence>.",
+   "Operational Discipline & SARTAJ Ownership": "Narrative for Operational Discipline & SARTAJ Ownership & <evidence>.",
+   "Planning, Organizing & Coordination": "Narrative for Planning, Organizing & Coordination & <evidence>.",
+   "Preventive Maintenance & Asset Care": "Narrative for Preventive Maintenance & Asset Care & <evidence>.",
+   "Team Orientation & Delegation": "Narrative for Team Orientation & Delegation & <evidence>.",
+   "Vendor & External Stakeholder Management": "Narrative for Vendor & External Stakeholder Management & <evidence>."
+  },
+  "competency_summary": {
+   "Communication & Assertiveness": 6.8,
+   "Cost & Resource Responsibility": 5.9,
+   "Customer Orientation & Relationship Handling": 4.3,
+   "Functional Knowledge & Multiskilling": 5.7,
+   "Integrity & Trust": 6.2,
+   "Operational Discipline & SARTAJ Ownership": 3.5,
+   "Planning, Organizing & Coordination": 4.7,
+   "Preventive Maintenance & Asset Care": 3.0,
+   "Team Orientation & Delegation": 5.8,
+   "Vendor & External Stakeholder Management": 6.7
+  },
+  "cross_competency_insights": [
+   {
+    "evidence": "E",
+    "implication": "I",
+    "pattern": "P"
+   }
+  ],
+  "development_actions": [
+   "Action one",
+   "Action two"
+  ],
+  "development_areas": [
+   {
+    "area": "Delegation",
+    "evidence": "did every task personally",
+    "priority": "high",
+    "rmc_context": "Shift handover"
+   },
+   "Plain-string area"
+  ],
+  "english_weight_pct": 15.0,
+  "integrity_red_flag": {
+   "present": false
+  },
+  "normalized_score_out_of_100": 52.4,
+  "overall_readiness": "Not Yet Ready",
+  "overall_score_out_of_300": 157.3,
+  "readiness_demoted_from": "Ready with Structured Support",
+  "readiness_explanation": "total 157/300 qualifies for 'Ready with Structured Support', but Preventive Maintenance & Asset Care (3.0) is below that tier's 5.0 competency floor",
+  "top_strengths": [
+   {
+    "evidence": "answered 26 of 30",
+    "rmc_relevance": "Plant uptime",
+    "strength": "Safety first"
+   },
+   "Plain-string strength"
+  ],
+  "transcript_appendix": [
+   {
+    "base_score": 8,
+    "competency": "Cost & Resource Responsibility",
+    "english_note": "note for CR-07",
+    "english_proficiency": 1.0,
+    "question_number": 1,
+    "score": 8.0,
+    "situation": "Energy cost rising; smart meter installed but not reviewed.",
+    "transcript": "Q1: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 5,
+    "competency": "Functional Knowledge & Multiskilling",
+    "english_note": "note for FK-02",
+    "english_proficiency": 0.0,
+    "question_number": 2,
+    "score": 4.2,
+    "situation": "After heavy rain, moisture correction not adjusted.",
+    "transcript": "Q2: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 5,
+    "competency": "Preventive Maintenance & Asset Care",
+    "english_note": "note for PM-04",
+    "english_proficiency": 0.0,
+    "question_number": 3,
+    "score": 4.2,
+    "situation": "Mixer gearbox failed twice in one year; vendor keeps replacing gearbox and blames gearbox quality.",
+    "transcript": "Q3: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 0,
+    "competency": "Preventive Maintenance & Asset Care",
+    "english_note": "",
+    "english_proficiency": 1.0,
+    "question_number": 4,
+    "score": 0.0,
+    "situation": "Screw conveyor jams intermittently but resumes after manual tapping. Replacement planned after 5 months.",
+    "transcript": ""
+   },
+   {
+    "base_score": 8,
+    "competency": "Team Orientation & Delegation",
+    "english_note": "note for TO-03",
+    "english_proficiency": 0.0,
+    "question_number": 5,
+    "score": 6.8,
+    "situation": "You handle dispatch/customers/vendors; due to busyness you skip reviewing maintenance log and reconciliation.",
+    "transcript": "Q5: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 7,
+    "competency": "Customer Orientation & Relationship Handling",
+    "english_note": "note for CO-08",
+    "english_proficiency": 1.0,
+    "question_number": 6,
+    "score": 7.0,
+    "situation": "Customer demands 200 m³ pour in 2 hours without booking.",
+    "transcript": "Q6: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 6,
+    "competency": "Team Orientation & Delegation",
+    "english_note": "note for TO-04",
+    "english_proficiency": 0.8,
+    "question_number": 7,
+    "score": 5.8,
+    "situation": "A smart trainee suggests improvements; you feel uncomfortable giving him responsibility.",
+    "transcript": "Q7: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 7,
+    "competency": "Integrity & Trust",
+    "english_note": "note for IN-04",
+    "english_proficiency": 1.0,
+    "question_number": 8,
+    "score": 7.0,
+    "situation": "Driver attendance compliance is low. Supervisor suggests marking attendance manually to avoid penalty escalation.",
+    "transcript": "Q8: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 5,
+    "competency": "Cost & Resource Responsibility",
+    "english_note": "note for CR-09",
+    "english_proficiency": 0.8,
+    "question_number": 9,
+    "score": 4.8,
+    "situation": "Not purchasing from L1 citing 'quality issue' but no test/rejection data supports it.",
+    "transcript": "Q9: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 5,
+    "competency": "Team Orientation & Delegation",
+    "english_note": "note for TO-02",
+    "english_proficiency": 0.55,
+    "question_number": 10,
+    "score": 4.7,
+    "situation": "Lab Tech overloaded; MO comparatively free; delays increasing.",
+    "transcript": "Q10: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 5,
+    "competency": "Integrity & Trust",
+    "english_note": "note for IN-10",
+    "english_proficiency": 1.0,
+    "question_number": 11,
+    "score": 5.0,
+    "situation": "Customer insists on paying cash for concrete supplied.",
+    "transcript": "Q11: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 7,
+    "competency": "Functional Knowledge & Multiskilling",
+    "english_note": "note for FK-07",
+    "english_proficiency": 1.0,
+    "question_number": 12,
+    "score": 7.0,
+    "situation": "Monthly cement reconciliation shows 2% unexplained variance.",
+    "transcript": "Q12: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 6,
+    "competency": "Vendor & External Stakeholder Management",
+    "english_note": "note for VM-08",
+    "english_proficiency": 0.8,
+    "question_number": 13,
+    "score": 5.8,
+    "situation": "Vendor informs same-day that 2 TMs unavailable due to maintenance, impacting commitments.",
+    "transcript": "Q13: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 6,
+    "competency": "Operational Discipline & SARTAJ Ownership",
+    "english_note": "note for SO-06",
+    "english_proficiency": 0.55,
+    "question_number": 14,
+    "score": 5.6,
+    "situation": "Kaushal score dropped due to low multiskilling participation.",
+    "transcript": "Q14: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 6,
+    "competency": "Functional Knowledge & Multiskilling",
+    "english_note": "note for FK-04",
+    "english_proficiency": 1.0,
+    "question_number": 15,
+    "score": 6.0,
+    "situation": "Cement discharge overshoots by 3–4 kg per batch.",
+    "transcript": "Q15: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 7,
+    "competency": "Integrity & Trust",
+    "english_note": "note for IN-06",
+    "english_proficiency": 0.55,
+    "question_number": 16,
+    "score": 6.5,
+    "situation": "Transport vendor offers an expensive personal gift during festival season.",
+    "transcript": "Q16: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 8,
+    "competency": "Communication & Assertiveness",
+    "english_note": "note for CA-02",
+    "english_proficiency": 0.55,
+    "question_number": 17,
+    "score": 7.5,
+    "situation": "TM driver argues loudly at plant gate and refuses queue discipline; other drivers watching.",
+    "transcript": "Q17: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 0,
+    "competency": "Planning, Organizing & Coordination",
+    "english_note": "",
+    "english_proficiency": 1.0,
+    "question_number": 18,
+    "score": 0.0,
+    "situation": "Forecast shows heavy rain 2–5 PM. Customer insists 11 AM start for 400 m³ slab.",
+    "transcript": ""
+   },
+   {
+    "base_score": 5,
+    "competency": "Cost & Resource Responsibility",
+    "english_note": "note for CR-04",
+    "english_proficiency": 0.8,
+    "question_number": 19,
+    "score": 4.8,
+    "situation": "Volume dropped to 1500 m³/month but manpower unchanged from earlier 3500 m³/month operations.",
+    "transcript": "Q19: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 6,
+    "competency": "Communication & Assertiveness",
+    "english_note": "note for CA-08",
+    "english_proficiency": 0.8,
+    "question_number": 20,
+    "score": 5.8,
+    "situation": "Trainee challenges your decision in front of plant staff.",
+    "transcript": "Q20: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 6,
+    "competency": "Planning, Organizing & Coordination",
+    "english_note": "note for PL-05",
+    "english_proficiency": 1.0,
+    "question_number": 21,
+    "score": 6.0,
+    "situation": "After 300 m³ day dispatch, 500 m³ night pour scheduled. Batcher and helpers are fatigued.",
+    "transcript": "Q21: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 8,
+    "competency": "Vendor & External Stakeholder Management",
+    "english_note": "note for VM-06",
+    "english_proficiency": 0.8,
+    "question_number": 22,
+    "score": 7.8,
+    "situation": "Concrete rejected after pump choke. Vendor insists plant must bear rejection cost.",
+    "transcript": "Q22: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 0,
+    "competency": "Operational Discipline & SARTAJ Ownership",
+    "english_note": "",
+    "english_proficiency": 1.0,
+    "question_number": 23,
+    "score": 0.0,
+    "situation": "Rejection % increased from 0.3% to 0.8% over 2 months.",
+    "transcript": "   \n "
+   },
+   {
+    "base_score": 7,
+    "competency": "Vendor & External Stakeholder Management",
+    "english_note": "note for VM-04",
+    "english_proficiency": 0.55,
+    "question_number": 24,
+    "score": 6.5,
+    "situation": "During peak 300 m³ pour, TM breaks down. Vendor does not provide replacement despite agreement.",
+    "transcript": "Q24: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 6,
+    "competency": "Customer Orientation & Relationship Handling",
+    "english_note": "note for CO-09",
+    "english_proficiency": 1.0,
+    "question_number": 25,
+    "score": 6.0,
+    "situation": "Site lacks safe access/barriers. Customer insists on starting pour immediately.",
+    "transcript": "Q25: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 0,
+    "competency": "Customer Orientation & Relationship Handling",
+    "english_note": "",
+    "english_proficiency": 1.0,
+    "question_number": 26,
+    "score": 0.0,
+    "situation": "Customer demands dedicated Field Tech exclusively though other projects need support.",
+    "transcript": ""
+   },
+   {
+    "base_score": 5,
+    "competency": "Preventive Maintenance & Asset Care",
+    "english_note": "note for PM-08",
+    "english_proficiency": 0.55,
+    "question_number": 27,
+    "score": 4.7,
+    "situation": "PRV not cleaned/inspected for months; during pumping, pipeline burst occurs.",
+    "transcript": "Q27: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 8,
+    "competency": "Planning, Organizing & Coordination",
+    "english_note": "note for PL-10",
+    "english_proficiency": 1.0,
+    "question_number": 28,
+    "score": 8.0,
+    "situation": "Committed 600 m³ slab. Aggregate bin empties mid-pour and loader needs refueling simultaneously.",
+    "transcript": "Q28: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 5,
+    "competency": "Operational Discipline & SARTAJ Ownership",
+    "english_note": "note for SO-08",
+    "english_proficiency": 0.8,
+    "question_number": 29,
+    "score": 4.8,
+    "situation": "Invoices must be uploaded daily. Plant daily compliance is 90%; remaining 10% done next day.",
+    "transcript": "Q29: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   },
+   {
+    "base_score": 7,
+    "competency": "Communication & Assertiveness",
+    "english_note": "note for CA-05",
+    "english_proficiency": 1.0,
+    "question_number": 30,
+    "score": 7.0,
+    "situation": "Helper skips cleaning mixer chute regularly to save time.",
+    "transcript": "Q30: पहले safety check करूँगा, then batch records & <slump> test, call the site engineer.\nFollow up next shift."
+   }
+  ],
+  "weakest_competency": "Preventive Maintenance & Asset Care",
+  "weakest_competency_score": 3.0
+ },
+ "retry_sleeps": [],
+ "scores": {
+  "CA-02": {
+   "base_score": 8,
+   "competency": "Communication & Assertiveness",
+   "details": {
+    "english_note": "note for CA-02",
+    "english_proficiency": 0.55,
+    "improvements": [
+     "Close the loop on CA-02 <with> the team & plant"
+    ],
+    "primary_competency": "Communication & Assertiveness",
+    "primary_depth": 3,
+    "problem_understanding": 2,
+    "secondary_awareness": 1,
+    "srt_id": "CA-02",
+    "strengths": [
+     "Named the Communication & Assertiveness risk in CA-02"
+    ],
+    "structure_clarity": 1,
+    "total": 8
+   },
+   "english_note": "note for CA-02",
+   "english_proficiency": 0.55,
+   "improvements": [
+    "Close the loop on CA-02 <with> the team & plant"
+   ],
+   "score": 7.5,
+   "strengths": [
+    "Named the Communication & Assertiveness risk in CA-02"
+   ]
+  },
+  "CA-05": {
+   "base_score": 7,
+   "competency": "Communication & Assertiveness",
+   "details": {
+    "english_note": "note for CA-05",
+    "english_proficiency": 1.0,
+    "improvements": [
+     "Close the loop on CA-05 <with> the team & plant"
+    ],
+    "primary_competency": "Communication & Assertiveness",
+    "primary_depth": 2,
+    "problem_understanding": 0,
+    "secondary_awareness": 0,
+    "srt_id": "CA-05",
+    "strengths": [
+     "Named the Communication & Assertiveness risk in CA-05"
+    ],
+    "structure_clarity": 1,
+    "total": 7
+   },
+   "english_note": "note for CA-05",
+   "english_proficiency": 1.0,
+   "improvements": [
+    "Close the loop on CA-05 <with> the team & plant"
+   ],
+   "score": 7.0,
+   "strengths": [
+    "Named the Communication & Assertiveness risk in CA-05"
+   ]
+  },
+  "CA-08": {
+   "base_score": 6,
+   "competency": "Communication & Assertiveness",
+   "details": {
+    "english_note": "note for CA-08",
+    "english_proficiency": 0.8,
+    "improvements": [
+     "Close the loop on CA-08 <with> the team & plant"
+    ],
+    "primary_competency": "Communication & Assertiveness",
+    "primary_depth": 1,
+    "problem_understanding": 2,
+    "secondary_awareness": 1,
+    "srt_id": "CA-08",
+    "strengths": [
+     "Named the Communication & Assertiveness risk in CA-08"
+    ],
+    "structure_clarity": 0,
+    "total": 6
+   },
+   "english_note": "note for CA-08",
+   "english_proficiency": 0.8,
+   "improvements": [
+    "Close the loop on CA-08 <with> the team & plant"
+   ],
+   "score": 5.8,
+   "strengths": [
+    "Named the Communication & Assertiveness risk in CA-08"
+   ]
+  },
+  "CO-06": {
+   "base_score": 0,
+   "competency": "Customer Orientation & Relationship Handling",
+   "details": {
+    "improvements": [
+     "Question not answered — counted as zero."
+    ],
+    "primary_competency": "Customer Orientation & Relationship Handling",
+    "primary_depth": 0,
+    "problem_understanding": 0,
+    "secondary_awareness": 0,
+    "srt_id": "CO-06",
+    "strengths": [],
+    "structure_clarity": 0,
+    "total": 0
+   },
+   "english_note": "",
+   "english_proficiency": 1.0,
+   "improvements": [
+    "Question not answered — counted as zero."
+   ],
+   "score": 0.0,
+   "strengths": []
+  },
+  "CO-08": {
+   "base_score": 7,
+   "competency": "Customer Orientation & Relationship Handling",
+   "details": {
+    "english_note": "note for CO-08",
+    "english_proficiency": 1.0,
+    "improvements": [
+     "Close the loop on CO-08 <with> the team & plant"
+    ],
+    "primary_competency": "Customer Orientation & Relationship Handling",
+    "primary_depth": 2,
+    "problem_understanding": 0,
+    "secondary_awareness": 0,
+    "srt_id": "CO-08",
+    "strengths": [
+     "Named the Customer Orientation & Relationship Handling risk in CO-08"
+    ],
+    "structure_clarity": 1,
+    "total": 7
+   },
+   "english_note": "note for CO-08",
+   "english_proficiency": 1.0,
+   "improvements": [
+    "Close the loop on CO-08 <with> the team & plant"
+   ],
+   "score": 7.0,
+   "strengths": [
+    "Named the Customer Orientation & Relationship Handling risk in CO-08"
+   ]
+  },
+  "CO-09": {
+   "base_score": 6,
+   "competency": "Customer Orientation & Relationship Handling",
+   "details": {
+    "english_note": "note for CO-09",
+    "english_proficiency": 1.0,
+    "improvements": [
+     "Close the loop on CO-09 <with> the team & plant"
+    ],
+    "primary_competency": "Customer Orientation & Relationship Handling",
+    "primary_depth": 1,
+    "problem_understanding": 1,
+    "secondary_awareness": 1,
+    "srt_id": "CO-09",
+    "strengths": [
+     "Named the Customer Orientation & Relationship Handling risk in CO-09"
+    ],
+    "structure_clarity": 0,
+    "total": 6
+   },
+   "english_note": "note for CO-09",
+   "english_proficiency": 1.0,
+   "improvements": [
+    "Close the loop on CO-09 <with> the team & plant"
+   ],
+   "score": 6.0,
+   "strengths": [
+    "Named the Customer Orientation & Relationship Handling risk in CO-09"
+   ]
+  },
+  "CR-04": {
+   "base_score": 5,
+   "competency": "Cost & Resource Responsibility",
+   "details": {
+    "english_note": "note for CR-04",
+    "english_proficiency": 0.8,
+    "improvements": [
+     "Close the loop on CR-04 <with> the team & plant"
+    ],
+    "primary_competency": "Cost & Resource Responsibility",
+    "primary_depth": 0,
+    "problem_understanding": 2,
+    "secondary_awareness": 0,
+    "srt_id": "CR-04",
+    "strengths": [
+     "Named the Cost & Resource Responsibility risk in CR-04"
+    ],
+    "structure_clarity": 0,
+    "total": 5
+   },
+   "english_note": "note for CR-04",
+   "english_proficiency": 0.8,
+   "improvements": [
+    "Close the loop on CR-04 <with> the team & plant"
+   ],
+   "score": 4.8,
+   "strengths": [
+    "Named the Cost & Resource Responsibility risk in CR-04"
+   ]
+  },
+  "CR-07": {
+   "base_score": 8,
+   "competency": "Cost & Resource Responsibility",
+   "details": {
+    "english_note": "note for CR-07",
+    "improvements": [
+     "Close the loop on CR-07 <with> the team & plant"
+    ],
+    "primary_competency": "Cost & Resource Responsibility",
+    "primary_depth": 3,
+    "problem_understanding": 1,
+    "secondary_awareness": 1,
+    "srt_id": "CR-07",
+    "strengths": [
+     "Named the Cost & Resource Responsibility risk in CR-07"
+    ],
+    "structure_clarity": 1,
+    "total": 8
+   },
+   "english_note": "note for CR-07",
+   "english_proficiency": 1.0,
+   "improvements": [
+    "Close the loop on CR-07 <with> the team & plant"
+   ],
+   "score": 8.0,
+   "strengths": [
+    "Named the Cost & Resource Responsibility risk in CR-07"
+   ]
+  },
+  "CR-09": {
+   "base_score": 5,
+   "competency": "Cost & Resource Responsibility",
+   "details": {
+    "english_note": "note for CR-09",
+    "english_proficiency": 0.8,
+    "improvements": [
+     "Close the loop on CR-09 <with> the team & plant"
+    ],
+    "primary_competency": "Cost & Resource Responsibility",
+    "primary_depth": 0,
+    "problem_understanding": 1,
+    "secondary_awareness": 0,
+    "srt_id": "CR-09",
+    "strengths": [
+     "Named the Cost & Resource Responsibility risk in CR-09"
+    ],
+    "structure_clarity": 0,
+    "total": 5
+   },
+   "english_note": "note for CR-09",
+   "english_proficiency": 0.8,
+   "improvements": [
+    "Close the loop on CR-09 <with> the team & plant"
+   ],
+   "score": 4.8,
+   "strengths": [
+    "Named the Cost & Resource Responsibility risk in CR-09"
+   ]
+  },
+  "FK-02": {
+   "base_score": 5,
+   "competency": "Functional Knowledge & Multiskilling",
+   "details": {
+    "english_note": "note for FK-02",
+    "english_proficiency": 0.0,
+    "improvements": [
+     "Close the loop on FK-02 <with> the team & plant"
+    ],
+    "primary_competency": "Functional Knowledge & Multiskilling",
+    "primary_depth": 0,
+    "problem_understanding": 0,
+    "secondary_awareness": 0,
+    "srt_id": "FK-02",
+    "strengths": [
+     "Named the Functional Knowledge & Multiskilling risk in FK-02"
+    ],
+    "structure_clarity": 0,
+    "total": 5
+   },
+   "english_note": "note for FK-02",
+   "english_proficiency": 0.0,
+   "improvements": [
+    "Close the loop on FK-02 <with> the team & plant"
+   ],
+   "score": 4.2,
+   "strengths": [
+    "Named the Functional Knowledge & Multiskilling risk in FK-02"
+   ]
+  },
+  "FK-04": {
+   "base_score": 6,
+   "competency": "Functional Knowledge & Multiskilling",
+   "details": {
+    "english_note": "note for FK-04",
+    "improvements": [
+     "Close the loop on FK-04 <with> the team & plant"
+    ],
+    "primary_competency": "Functional Knowledge & Multiskilling",
+    "primary_depth": 1,
+    "problem_understanding": 2,
+    "secondary_awareness": 1,
+    "srt_id": "FK-04",
+    "strengths": [
+     "Named the Functional Knowledge & Multiskilling risk in FK-04"
+    ],
+    "structure_clarity": 0,
+    "total": 6
+   },
+   "english_note": "note for FK-04",
+   "english_proficiency": 1.0,
+   "improvements": [
+    "Close the loop on FK-04 <with> the team & plant"
+   ],
+   "score": 6.0,
+   "strengths": [
+    "Named the Functional Knowledge & Multiskilling risk in FK-04"
+   ]
+  },
+  "FK-07": {
+   "base_score": 7,
+   "competency": "Functional Knowledge & Multiskilling",
+   "details": {
+    "english_note": "note for FK-07",
+    "english_proficiency": 1.0,
+    "improvements": [
+     "Close the loop on FK-07 <with> the team & plant"
+    ],
+    "primary_competency": "Functional Knowledge & Multiskilling",
+    "primary_depth": 2,
+    "problem_understanding": 2,
+    "secondary_awareness": 0,
+    "srt_id": "FK-07",
+    "strengths": [
+     "Named the Functional Knowledge & Multiskilling risk in FK-07"
+    ],
+    "structure_clarity": 1,
+    "total": 7
+   },
+   "english_note": "note for FK-07",
+   "english_proficiency": 1.0,
+   "improvements": [
+    "Close the loop on FK-07 <with> the team & plant"
+   ],
+   "score": 7.0,
+   "strengths": [
+    "Named the Functional Knowledge & Multiskilling risk in FK-07"
+   ]
+  },
+  "IN-04": {
+   "base_score": 7,
+   "competency": "Integrity & Trust",
+   "details": {
+    "english_note": "note for IN-04",
+    "improvements": [
+     "Close the loop on IN-04 <with> the team & plant"
+    ],
+    "primary_competency": "Integrity & Trust",
+    "primary_depth": 2,
+    "problem_understanding": 2,
+    "secondary_awareness": 0,
+    "srt_id": "IN-04",
+    "strengths": [
+     "Named the Integrity & Trust risk in IN-04"
+    ],
+    "structure_clarity": 0,
+    "total": 7
+   },
+   "english_note": "note for IN-04",
+   "english_proficiency": 1.0,
+   "improvements": [
+    "Close the loop on IN-04 <with> the team & plant"
+   ],
+   "score": 7.0,
+   "strengths": [
+    "Named the Integrity & Trust risk in IN-04"
+   ]
+  },
+  "IN-06": {
+   "base_score": 7,
+   "competency": "Integrity & Trust",
+   "details": {
+    "english_note": "note for IN-06",
+    "english_proficiency": 0.55,
+    "improvements": [
+     "Close the loop on IN-06 <with> the team & plant"
+    ],
+    "primary_competency": "Integrity & Trust",
+    "primary_depth": 2,
+    "problem_understanding": 1,
+    "secondary_awareness": 0,
+    "srt_id": "IN-06",
+    "strengths": [
+     "Named the Integrity & Trust risk in IN-06"
+    ],
+    "structure_clarity": 0,
+    "total": 7
+   },
+   "english_note": "note for IN-06",
+   "english_proficiency": 0.55,
+   "improvements": [
+    "Close the loop on IN-06 <with> the team & plant"
+   ],
+   "score": 6.5,
+   "strengths": [
+    "Named the Integrity & Trust risk in IN-06"
+   ]
+  },
+  "IN-10": {
+   "base_score": 5,
+   "competency": "Integrity & Trust",
+   "details": {
+    "english_note": "note for IN-10",
+    "improvements": [
+     "Close the loop on IN-10 <with> the team & plant"
+    ],
+    "primary_competency": "Integrity & Trust",
+    "primary_depth": 0,
+    "problem_understanding": 1,
+    "secondary_awareness": 0,
+    "srt_id": "IN-10",
+    "strengths": [
+     "Named the Integrity & Trust risk in IN-10"
+    ],
+    "structure_clarity": 0,
+    "total": 5
+   },
+   "english_note": "note for IN-10",
+   "english_proficiency": 1.0,
+   "improvements": [
+    "Close the loop on IN-10 <with> the team & plant"
+   ],
+   "score": 5.0,
+   "strengths": [
+    "Named the Integrity & Trust risk in IN-10"
+   ]
+  },
+  "PL-04": {
+   "base_score": 0,
+   "competency": "Planning, Organizing & Coordination",
+   "details": {
+    "improvements": [
+     "Question not answered — counted as zero."
+    ],
+    "primary_competency": "Planning, Organizing & Coordination",
+    "primary_depth": 0,
+    "problem_understanding": 0,
+    "secondary_awareness": 0,
+    "srt_id": "PL-04",
+    "strengths": [],
+    "structure_clarity": 0,
+    "total": 0
+   },
+   "english_note": "",
+   "english_proficiency": 1.0,
+   "improvements": [
+    "Question not answered — counted as zero."
+   ],
+   "score": 0.0,
+   "strengths": []
+  },
+  "PL-05": {
+   "base_score": 6,
+   "competency": "Planning, Organizing & Coordination",
+   "details": {
+    "english_note": "note for PL-05",
+    "improvements": [
+     "Close the loop on PL-05 <with> the team & plant"
+    ],
+    "primary_competency": "Planning, Organizing & Coordination",
+    "primary_depth": 1,
+    "problem_understanding": 2,
+    "secondary_awareness": 1,
+    "srt_id": "PL-05",
+    "strengths": [
+     "Named the Planning, Organizing & Coordination risk in PL-05"
+    ],
+    "structure_clarity": 0,
+    "total": 6
+   },
+   "english_note": "note for PL-05",
+   "english_proficiency": 1.0,
+   "improvements": [
+    "Close the loop on PL-05 <with> the team & plant"
+   ],
+   "score": 6.0,
+   "strengths": [
+    "Named the Planning, Organizing & Coordination risk in PL-05"
+   ]
+  },
+  "PL-10": {
+   "base_score": 8,
+   "competency": "Planning, Organizing & Coordination",
+   "details": {
+    "english_note": "note for PL-10",
+    "improvements": [
+     "Close the loop on PL-10 <with> the team & plant"
+    ],
+    "primary_competency": "Planning, Organizing & Coordination",
+    "primary_depth": 3,
+    "problem_understanding": 2,
+    "secondary_awareness": 1,
+    "srt_id": "PL-10",
+    "strengths": [
+     "Named the Planning, Organizing & Coordination risk in PL-10"
+    ],
+    "structure_clarity": 1,
+    "total": 8
+   },
+   "english_note": "note for PL-10",
+   "english_proficiency": 1.0,
+   "improvements": [
+    "Close the loop on PL-10 <with> the team & plant"
+   ],
+   "score": 8.0,
+   "strengths": [
+    "Named the Planning, Organizing & Coordination risk in PL-10"
+   ]
+  },
+  "PM-01": {
+   "base_score": 0,
+   "competency": "Preventive Maintenance & Asset Care",
+   "details": {
+    "improvements": [
+     "Question not answered — counted as zero."
+    ],
+    "primary_competency": "Preventive Maintenance & Asset Care",
+    "primary_depth": 0,
+    "problem_understanding": 0,
+    "secondary_awareness": 0,
+    "srt_id": "PM-01",
+    "strengths": [],
+    "structure_clarity": 0,
+    "total": 0
+   },
+   "english_note": "",
+   "english_proficiency": 1.0,
+   "improvements": [
+    "Question not answered — counted as zero."
+   ],
+   "score": 0.0,
+   "strengths": []
+  },
+  "PM-04": {
+   "base_score": 5,
+   "competency": "Preventive Maintenance & Asset Care",
+   "details": {
+    "english_note": "note for PM-04",
+    "english_proficiency": 0.0,
+    "improvements": [
+     "Close the loop on PM-04 <with> the team & plant"
+    ],
+    "primary_competency": "Preventive Maintenance & Asset Care",
+    "primary_depth": 0,
+    "problem_understanding": 0,
+    "secondary_awareness": 0,
+    "srt_id": "PM-04",
+    "strengths": [
+     "Named the Preventive Maintenance & Asset Care risk in PM-04"
+    ],
+    "structure_clarity": 1,
+    "total": 5
+   },
+   "english_note": "note for PM-04",
+   "english_proficiency": 0.0,
+   "improvements": [
+    "Close the loop on PM-04 <with> the team & plant"
+   ],
+   "score": 4.2,
+   "strengths": [
+    "Named the Preventive Maintenance & Asset Care risk in PM-04"
+   ]
+  },
+  "PM-08": {
+   "base_score": 5,
+   "competency": "Preventive Maintenance & Asset Care",
+   "details": {
+    "english_note": "note for PM-08",
+    "english_proficiency": 0.55,
+    "improvements": [
+     "Close the loop on PM-08 <with> the team & plant"
+    ],
+    "primary_competency": "Preventive Maintenance & Asset Care",
+    "primary_depth": 0,
+    "problem_understanding": 2,
+    "secondary_awareness": 0,
+    "srt_id": "PM-08",
+    "strengths": [
+     "Named the Preventive Maintenance & Asset Care risk in PM-08"
+    ],
+    "structure_clarity": 0,
+    "total": 5
+   },
+   "english_note": "note for PM-08",
+   "english_proficiency": 0.55,
+   "improvements": [
+    "Close the loop on PM-08 <with> the team & plant"
+   ],
+   "score": 4.7,
+   "strengths": [
+    "Named the Preventive Maintenance & Asset Care risk in PM-08"
+   ]
+  },
+  "SO-04": {
+   "base_score": 0,
+   "competency": "Operational Discipline & SARTAJ Ownership",
+   "details": {
+    "improvements": [
+     "Question not answered — counted as zero."
+    ],
+    "primary_competency": "Operational Discipline & SARTAJ Ownership",
+    "primary_depth": 0,
+    "problem_understanding": 0,
+    "secondary_awareness": 0,
+    "srt_id": "SO-04",
+    "strengths": [],
+    "structure_clarity": 0,
+    "total": 0
+   },
+   "english_note": "",
+   "english_proficiency": 1.0,
+   "improvements": [
+    "Question not answered — counted as zero."
+   ],
+   "score": 0.0,
+   "strengths": []
+  },
+  "SO-06": {
+   "base_score": 6,
+   "competency": "Operational Discipline & SARTAJ Ownership",
+   "details": {
+    "english_note": "note for SO-06",
+    "english_proficiency": 0.55,
+    "improvements": [
+     "Close the loop on SO-06 <with> the team & plant"
+    ],
+    "primary_competency": "Operational Discipline & SARTAJ Ownership",
+    "primary_depth": 1,
+    "problem_understanding": 2,
+    "secondary_awareness": 1,
+    "srt_id": "SO-06",
+    "strengths": [
+     "Named the Operational Discipline & SARTAJ Ownership risk in SO-06"
+    ],
+    "structure_clarity": 0,
+    "total": 6
+   },
+   "english_note": "note for SO-06",
+   "english_proficiency": 0.55,
+   "improvements": [
+    "Close the loop on SO-06 <with> the team & plant"
+   ],
+   "score": 5.6,
+   "strengths": [
+    "Named the Operational Discipline & SARTAJ Ownership risk in SO-06"
+   ]
+  },
+  "SO-08": {
+   "base_score": 5,
+   "competency": "Operational Discipline & SARTAJ Ownership",
+   "details": {
+    "english_note": "note for SO-08",
+    "english_proficiency": 0.8,
+    "improvements": [
+     "Close the loop on SO-08 <with> the team & plant"
+    ],
+    "primary_competency": "Operational Discipline & SARTAJ Ownership",
+    "primary_depth": 0,
+    "problem_understanding": 2,
+    "secondary_awareness": 0,
+    "srt_id": "SO-08",
+    "strengths": [
+     "Named the Operational Discipline & SARTAJ Ownership risk in SO-08"
+    ],
+    "structure_clarity": 1,
+    "total": 5
+   },
+   "english_note": "note for SO-08",
+   "english_proficiency": 0.8,
+   "improvements": [
+    "Close the loop on SO-08 <with> the team & plant"
+   ],
+   "score": 4.8,
+   "strengths": [
+    "Named the Operational Discipline & SARTAJ Ownership risk in SO-08"
+   ]
+  },
+  "TO-02": {
+   "base_score": 5,
+   "competency": "Team Orientation & Delegation",
+   "details": {
+    "english_note": "note for TO-02",
+    "english_proficiency": 0.55,
+    "improvements": [
+     "Close the loop on TO-02 <with> the team & plant"
+    ],
+    "primary_competency": "Team Orientation & Delegation",
+    "primary_depth": 0,
+    "problem_understanding": 1,
+    "secondary_awareness": 0,
+    "srt_id": "TO-02",
+    "strengths": [
+     "Named the Team Orientation & Delegation risk in TO-02"
+    ],
+    "structure_clarity": 1,
+    "total": 5
+   },
+   "english_note": "note for TO-02",
+   "english_proficiency": 0.55,
+   "improvements": [
+    "Close the loop on TO-02 <with> the team & plant"
+   ],
+   "score": 4.7,
+   "strengths": [
+    "Named the Team Orientation & Delegation risk in TO-02"
+   ]
+  },
+  "TO-03": {
+   "base_score": 8,
+   "competency": "Team Orientation & Delegation",
+   "details": {
+    "english_note": "note for TO-03",
+    "english_proficiency": 0.0,
+    "improvements": [
+     "Close the loop on TO-03 <with> the team & plant"
+    ],
+    "primary_competency": "Team Orientation & Delegation",
+    "primary_depth": 3,
+    "problem_understanding": 1,
+    "secondary_awareness": 1,
+    "srt_id": "TO-03",
+    "strengths": [
+     "Named the Team Orientation & Delegation risk in TO-03"
+    ],
+    "structure_clarity": 1,
+    "total": 8
+   },
+   "english_note": "note for TO-03",
+   "english_proficiency": 0.0,
+   "improvements": [
+    "Close the loop on TO-03 <with> the team & plant"
+   ],
+   "score": 6.8,
+   "strengths": [
+    "Named the Team Orientation & Delegation risk in TO-03"
+   ]
+  },
+  "TO-04": {
+   "base_score": 6,
+   "competency": "Team Orientation & Delegation",
+   "details": {
+    "english_note": "note for TO-04",
+    "english_proficiency": 0.8,
+    "improvements": [
+     "Close the loop on TO-04 <with> the team & plant"
+    ],
+    "primary_competency": "Team Orientation & Delegation",
+    "primary_depth": 1,
+    "problem_understanding": 2,
+    "secondary_awareness": 1,
+    "srt_id": "TO-04",
+    "strengths": [
+     "Named the Team Orientation & Delegation risk in TO-04"
+    ],
+    "structure_clarity": 0,
+    "total": 6
+   },
+   "english_note": "note for TO-04",
+   "english_proficiency": 0.8,
+   "improvements": [
+    "Close the loop on TO-04 <with> the team & plant"
+   ],
+   "score": 5.8,
+   "strengths": [
+    "Named the Team Orientation & Delegation risk in TO-04"
+   ]
+  },
+  "VM-04": {
+   "base_score": 7,
+   "competency": "Vendor & External Stakeholder Management",
+   "details": {
+    "english_note": "note for VM-04",
+    "english_proficiency": 0.55,
+    "improvements": [
+     "Close the loop on VM-04 <with> the team & plant"
+    ],
+    "primary_competency": "Vendor & External Stakeholder Management",
+    "primary_depth": 2,
+    "problem_understanding": 1,
+    "secondary_awareness": 0,
+    "srt_id": "VM-04",
+    "strengths": [
+     "Named the Vendor & External Stakeholder Management risk in VM-04"
+    ],
+    "structure_clarity": 1,
+    "total": 7
+   },
+   "english_note": "note for VM-04",
+   "english_proficiency": 0.55,
+   "improvements": [
+    "Close the loop on VM-04 <with> the team & plant"
+   ],
+   "score": 6.5,
+   "strengths": [
+    "Named the Vendor & External Stakeholder Management risk in VM-04"
+   ]
+  },
+  "VM-06": {
+   "base_score": 8,
+   "competency": "Vendor & External Stakeholder Management",
+   "details": {
+    "english_note": "note for VM-06",
+    "english_proficiency": 0.8,
+    "improvements": [
+     "Close the loop on VM-06 <with> the team & plant"
+    ],
+    "primary_competency": "Vendor & External Stakeholder Management",
+    "primary_depth": 3,
+    "problem_understanding": 1,
+    "secondary_awareness": 1,
+    "srt_id": "VM-06",
+    "strengths": [
+     "Named the Vendor & External Stakeholder Management risk in VM-06"
+    ],
+    "structure_clarity": 0,
+    "total": 8
+   },
+   "english_note": "note for VM-06",
+   "english_proficiency": 0.8,
+   "improvements": [
+    "Close the loop on VM-06 <with> the team & plant"
+   ],
+   "score": 7.8,
+   "strengths": [
+    "Named the Vendor & External Stakeholder Management risk in VM-06"
+   ]
+  },
+  "VM-08": {
+   "base_score": 6,
+   "competency": "Vendor & External Stakeholder Management",
+   "details": {
+    "english_note": "note for VM-08",
+    "english_proficiency": 0.8,
+    "improvements": [
+     "Close the loop on VM-08 <with> the team & plant"
+    ],
+    "primary_competency": "Vendor & External Stakeholder Management",
+    "primary_depth": 1,
+    "problem_understanding": 2,
+    "secondary_awareness": 1,
+    "srt_id": "VM-08",
+    "strengths": [
+     "Named the Vendor & External Stakeholder Management risk in VM-08"
+    ],
+    "structure_clarity": 1,
+    "total": 6
+   },
+   "english_note": "note for VM-08",
+   "english_proficiency": 0.8,
+   "improvements": [
+    "Close the loop on VM-08 <with> the team & plant"
+   ],
+   "score": 5.8,
+   "strengths": [
+    "Named the Vendor & External Stakeholder Management risk in VM-08"
+   ]
+  }
+ },
+ "status": "completed"
+}

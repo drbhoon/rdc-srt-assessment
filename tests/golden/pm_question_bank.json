@@ -1,0 +1,137 @@
+{
+ "competency_order": [
+  "Integrity & Trust",
+  "Preventive Maintenance & Asset Care",
+  "Planning, Organizing & Coordination",
+  "Operational Discipline & SARTAJ Ownership",
+  "Communication & Assertiveness",
+  "Team Orientation & Delegation",
+  "Customer Orientation & Relationship Handling",
+  "Vendor & External Stakeholder Management",
+  "Cost & Resource Responsibility",
+  "Functional Knowledge & Multiskilling"
+ ],
+ "content_sha256": "9b616948571a8686079e5c0e50a10fee14e49256600c836339b17346e1f7e197",
+ "srt_ids": {
+  "Communication & Assertiveness": [
+   "CA-01",
+   "CA-02",
+   "CA-03",
+   "CA-04",
+   "CA-05",
+   "CA-06",
+   "CA-07",
+   "CA-08",
+   "CA-09",
+   "CA-10"
+  ],
+  "Cost & Resource Responsibility": [
+   "CR-01",
+   "CR-02",
+   "CR-03",
+   "CR-04",
+   "CR-05",
+   "CR-06",
+   "CR-07",
+   "CR-08",
+   "CR-09",
+   "CR-10"
+  ],
+  "Customer Orientation & Relationship Handling": [
+   "CO-01",
+   "CO-02",
+   "CO-03",
+   "CO-04",
+   "CO-05",
+   "CO-06",
+   "CO-07",
+   "CO-08",
+   "CO-09",
+   "CO-10"
+  ],
+  "Functional Knowledge & Multiskilling": [
+   "FK-01",
+   "FK-02",
+   "FK-03",
+   "FK-04",
+   "FK-05",
+   "FK-06",
+   "FK-07",
+   "FK-08",
+   "FK-09",
+   "FK-10"
+  ],
+  "Integrity & Trust": [
+   "IN-01",
+   "IN-02",
+   "IN-03",
+   "IN-04",
+   "IN-05",
+   "IN-06",
+   "IN-07",
+   "IN-08",
+   "IN-09",
+   "IN-10"
+  ],
+  "Operational Discipline & SARTAJ Ownership": [
+   "SO-01",
+   "SO-02",
+   "SO-03",
+   "SO-04",
+   "SO-05",
+   "SO-06",
+   "SO-07",
+   "SO-08",
+   "SO-09",
+   "SO-10"
+  ],
+  "Planning, Organizing & Coordination": [
+   "PL-01",
+   "PL-02",
+   "PL-03",
+   "PL-04",
+   "PL-05",
+   "PL-06",
+   "PL-07",
+   "PL-08",
+   "PL-09",
+   "PL-10"
+  ],
+  "Preventive Maintenance & Asset Care": [
+   "PM-01",
+   "PM-02",
+   "PM-03",
+   "PM-04",
+   "PM-05",
+   "PM-06",
+   "PM-07",
+   "PM-08",
+   "PM-09",
+   "PM-10"
+  ],
+  "Team Orientation & Delegation": [
+   "TO-01",
+   "TO-02",
+   "TO-03",
+   "TO-04",
+   "TO-05",
+   "TO-06",
+   "TO-07",
+   "TO-08",
+   "TO-09",
+   "TO-10"
+  ],
+  "Vendor & External Stakeholder Management": [
+   "VM-01",
+   "VM-02",
+   "VM-03",
+   "VM-04",
+   "VM-05",
+   "VM-06",
+   "VM-07",
+   "VM-08",
+   "VM-09",
+   "VM-10"
+  ]
+ }
+}

@@ -1,0 +1,130 @@
+{
+ "columns": {
+  "access_codes.code": {
+   "default": null,
+   "nullable": "NO",
+   "type": "text"
+  },
+  "access_codes.created_at": {
+   "default": "now()",
+   "nullable": "YES",
+   "type": "timestamp without time zone"
+  },
+  "access_codes.label": {
+   "default": null,
+   "nullable": "YES",
+   "type": "text"
+  },
+  "access_codes.max_uses": {
+   "default": "10",
+   "nullable": "YES",
+   "type": "integer"
+  },
+  "access_codes.used_count": {
+   "default": "0",
+   "nullable": "YES",
+   "type": "integer"
+  },
+  "sessions.assessment_date": {
+   "default": null,
+   "nullable": "YES",
+   "type": "text"
+  },
+  "sessions.candidate_name": {
+   "default": null,
+   "nullable": "YES",
+   "type": "text"
+  },
+  "sessions.candidate_type": {
+   "default": "'employee'::text",
+   "nullable": "NO",
+   "type": "text"
+  },
+  "sessions.captured_email": {
+   "default": null,
+   "nullable": "YES",
+   "type": "text"
+  },
+  "sessions.collected_answers": {
+   "default": null,
+   "nullable": "YES",
+   "type": "jsonb"
+  },
+  "sessions.created_at": {
+   "default": "now()",
+   "nullable": "YES",
+   "type": "timestamp without time zone"
+  },
+  "sessions.employee_code": {
+   "default": null,
+   "nullable": "YES",
+   "type": "text"
+  },
+  "sessions.error": {
+   "default": null,
+   "nullable": "YES",
+   "type": "text"
+  },
+  "sessions.pdf_data": {
+   "default": null,
+   "nullable": "YES",
+   "type": "bytea"
+  },
+  "sessions.pdf_error": {
+   "default": null,
+   "nullable": "YES",
+   "type": "text"
+  },
+  "sessions.person_id": {
+   "default": null,
+   "nullable": "YES",
+   "type": "bigint"
+  },
+  "sessions.plant_location": {
+   "default": null,
+   "nullable": "YES",
+   "type": "text"
+  },
+  "sessions.processing_started_at": {
+   "default": null,
+   "nullable": "YES",
+   "type": "timestamp without time zone"
+  },
+  "sessions.progress": {
+   "default": "0",
+   "nullable": "YES",
+   "type": "integer"
+  },
+  "sessions.questions": {
+   "default": null,
+   "nullable": "YES",
+   "type": "jsonb"
+  },
+  "sessions.report": {
+   "default": null,
+   "nullable": "YES",
+   "type": "jsonb"
+  },
+  "sessions.scores": {
+   "default": "'{}'::jsonb",
+   "nullable": "YES",
+   "type": "jsonb"
+  },
+  "sessions.session_id": {
+   "default": null,
+   "nullable": "NO",
+   "type": "text"
+  },
+  "sessions.status": {
+   "default": "'in_progress'::text",
+   "nullable": "YES",
+   "type": "text"
+  }
+ },
+ "indexes": {
+  "access_codes_pkey": "CREATE UNIQUE INDEX access_codes_pkey ON public.access_codes USING btree (code)",
+  "sessions_employee_code_idx": "CREATE INDEX sessions_employee_code_idx ON public.sessions USING btree (employee_code)",
+  "sessions_person_idx": "CREATE INDEX sessions_person_idx ON public.sessions USING btree (person_id)",
+  "sessions_pkey": "CREATE UNIQUE INDEX sessions_pkey ON public.sessions USING btree (session_id)"
+ }
+}

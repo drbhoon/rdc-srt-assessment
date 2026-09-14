@@ -117,8 +117,8 @@
       <div class="stat-lbl">Competencies</div>
     </div>
     <div class="stat-item">
-      <div class="stat-num">300</div>
-      <div class="stat-lbl">Max Score</div>
+      <div class="stat-num" id="thirdStatNum">300</div>
+      <div class="stat-lbl" id="thirdStatLbl">Max Score</div>
     </div>
     <div class="stat-item">
       <div class="stat-num" id="assessmentTimeStat">75</div>
@@ -228,7 +228,7 @@
 
   <div class="card">
     <div class="card-title">ℹ️ Assessment Instructions</div>
-    <ul style="list-style:disc; padding-left:20px; font-size:14px; line-height:2;">
+    <ul id="instructionsList" style="list-style:disc; padding-left:20px; font-size:14px; line-height:2;">
       <li>You will be presented with <strong>30 real-world plant situations</strong> one at a time.</li>
       <li>Read each situation carefully and respond as you would in the actual role.</li>
       <li>You may <strong>type your response</strong> or use the <strong>voice dictation</strong> feature.</li>
@@ -258,6 +258,36 @@
   }).catch(() => {});
 
   let validatedCode = '';
+
+  // The assessment a validated code starts. The code decides; the candidate
+  // is never offered a choice. Plant Manager leaves the page exactly as it is.
+  let validatedType = 'plant_manager';
+
+  const PQI_INSTRUCTIONS = [
+    'You will be presented with <strong>30 real-world quality situations</strong> one at a time.',
+    'Read each situation carefully and respond as you would as the Plant Quality Incharge.',
+    'You may <strong>type your response</strong> or use <strong>voice dictation</strong>. English, Hindi and Hinglish are all fine — for voice, choose English or Hindi speech recognition.',
+    'Be specific: state your decision, the evidence you rely on, who does what, and how you would stop the problem recurring.',
+    'Total time allowed: <strong>{minutes} minutes</strong>. A countdown timer is shown at the top.',
+    'Your answers are saved as you go. If your connection drops, reopen this page and enter the same access code and details to continue where you left off — the timer keeps running from your original start.',
+    'Unanswered questions are scored as zero.',
+    'After submission, HR will review your results and revert back to you with the outcome.',
+  ];
+
+  function applyAssessment(type) {
+    validatedType = type === 'pqi' ? 'pqi' : 'plant_manager';
+    if (validatedType !== 'pqi') return;
+    const name = 'Plant Quality Incharge (PQI) Situation Based Competency Assessment';
+    document.title = 'RDC ' + name;
+    document.querySelector('.header-title').textContent = name;
+    document.querySelector('.hero p').textContent =
+      'AI-assisted competency evaluation for RMC Plant Quality Incharge candidates.';
+    document.getElementById('thirdStatNum').textContent = 'EN / हिं';
+    document.getElementById('thirdStatLbl').textContent = 'Voice Languages';
+    const minutes = document.getElementById('assessmentTimeStat').textContent || '75';
+    document.getElementById('instructionsList').innerHTML =
+      PQI_INSTRUCTIONS.map(item => '<li>' + item.replace('{minutes}', minutes) + '</li>').join('');
+  }
 
   // Digits-only live filter on the code input
   const codeInput = document.getElementById('accessCode');
@@ -324,6 +354,7 @@
     }
 
     validatedCode = code;
+    applyAssessment(d.assessment_type);
     codeInput.disabled = true;
     btn.style.display  = 'none';
     metaEl.textContent = `✅ Code valid — ${d.remaining} of ${d.max_uses} slots available.`;
@@ -513,6 +544,21 @@
       sessionStorage.setItem('rdc_questions',  JSON.stringify(data.questions));
       sessionStorage.setItem('rdc_candidate',  JSON.stringify(candForStore));
       sessionStorage.setItem('rdc_answers',    JSON.stringify({}));
+      if (data.assessment_type === 'pqi') {
+        // PQI: the server holds the attempt. A resumed attempt brings back its
+        // saved answers and the time left on the ORIGINAL deadline.
+        sessionStorage.setItem('rdc_assessment_type', 'pqi');
+        sessionStorage.setItem('rdc_answers',     JSON.stringify(data.answers || {}));
+        sessionStorage.setItem('rdc_answer_meta', JSON.stringify(data.answer_meta || {}));
+        sessionStorage.setItem('rdc_deadline_' + data.session_id,
+                               String(Date.now() + (data.remaining_seconds || 0) * 1000));
+        if (data.resumed) {
+          alert('Welcome back. Your saved answers have been restored, and the timer continues from your original start.');
+        }
+      } else {
+        sessionStorage.removeItem('rdc_assessment_type');
+        sessionStorage.removeItem('rdc_answer_meta');
+      }
 
       // v4.18 cache-buster — prevents browser from serving a stale
       // assessment.html (which would lock the candidate into the old

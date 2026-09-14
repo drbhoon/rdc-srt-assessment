@@ -158,6 +158,12 @@
       <p class="alert alert-info" id="voiceWarn" style="display:none;">
         ⚠️ Voice input not supported in your browser. Please use Chrome or Edge.
       </p>
+      <!-- PQI only: English or Hindi speech recognition. Hinglish is fine with either. -->
+      <div id="voiceLangWrap" style="display:none; margin-bottom:12px;">
+        <span style="font-size:13px; color:var(--grey-mid); margin-right:6px;">Speech language:</span>
+        <button type="button" class="mode-btn active" id="langEn" onclick="setVoiceLang('en-IN')">English</button>
+        <button type="button" class="mode-btn" id="langHi" onclick="setVoiceLang('hi-IN')">हिन्दी (Hindi)</button>
+      </div>
       <button class="mic-btn" id="micBtn" title="Click to start/stop recording">
         <svg class="mic-icon" viewBox="0 0 24 24">
           <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
@@ -254,6 +260,119 @@ if (!sessionId || !questions.length) { window.location.href = (window.BASE_PATH 
 document.getElementById('candidateHeader').textContent =
   `${candidate.candidate_name || ''} | ${candidate.plant_location || ''}`;
 
+// ─── PQI ─────────────────────────────────────────────────────────────────────
+// Plant Manager never sets rdc_assessment_type, so every PQI branch in this
+// page is skipped and its flow is exactly as before. PQI adds: a server-held
+// deadline, each answer saved to the server as it is written, and English or
+// Hindi speech recognition.
+const isPqi = sessionStorage.getItem('rdc_assessment_type') === 'pqi';
+let answerMeta = JSON.parse(sessionStorage.getItem('rdc_answer_meta') || '{}');
+let voiceLang  = sessionStorage.getItem('rdc_voice_lang') === 'hi-IN' ? 'hi-IN' : 'en-IN';
+const pendingSaves = {};   // srt_id -> answer not yet confirmed by the server
+const serverSaved  = {};   // srt_id -> text the server last confirmed
+let saveTimer = null;
+
+if (isPqi) {
+  document.title = 'Plant Quality Incharge (PQI) – SRT Assessment | RDC';
+  document.querySelector('.header-title').textContent =
+    'Plant Quality Incharge (PQI) Situation Based Competency Assessment';
+  document.getElementById('voiceLangWrap').style.display = 'block';
+  document.getElementById('langEn').classList.toggle('active', voiceLang === 'en-IN');
+  document.getElementById('langHi').classList.toggle('active', voiceLang === 'hi-IN');
+}
+
+function setVoiceLang(lang) {
+  if (isRecording) stopVoice();
+  voiceLang = lang === 'hi-IN' ? 'hi-IN' : 'en-IN';
+  sessionStorage.setItem('rdc_voice_lang', voiceLang);
+  document.getElementById('langEn').classList.toggle('active', voiceLang === 'en-IN');
+  document.getElementById('langHi').classList.toggle('active', voiceLang === 'hi-IN');
+}
+
+function recordMeta(srtId, input) {
+  const prev = answerMeta[srtId];
+  // A voice transcript tidied up by typing is still a voice answer.
+  if (!(input === 'typed' && prev && prev.input === 'voice')) {
+    answerMeta[srtId] = { input, language: input === 'voice' ? voiceLang : null };
+  }
+  sessionStorage.setItem('rdc_answer_meta', JSON.stringify(answerMeta));
+  return answerMeta[srtId];
+}
+
+function queueServerSave(srtId, text, input) {
+  if (!isPqi || !srtId) return;
+  if (serverSaved[srtId] === text && !pendingSaves[srtId]) return;
+  let meta = { input: 'typed', language: null };
+  if (text) {
+    meta = recordMeta(srtId, input);
+  } else {
+    delete answerMeta[srtId];
+    sessionStorage.setItem('rdc_answer_meta', JSON.stringify(answerMeta));
+  }
+  pendingSaves[srtId] = { text, input: meta.input, language: meta.language };
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(flushServerSaves, 1200);
+}
+
+async function flushServerSaves() {
+  for (const srtId of Object.keys(pendingSaves)) {
+    const item = pendingSaves[srtId];
+    try {
+      const res = await fetch('/api/save-answer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, srt_id: srtId, text: item.text,
+                               input: item.input, language: item.language }),
+      });
+      if (res.ok) {
+        serverSaved[srtId] = item.text;
+        if (pendingSaves[srtId] === item) delete pendingSaves[srtId];
+        continue;
+      }
+      if (res.status === 409) {               // already submitted (e.g. from another tab)
+        window.location.href = (window.BASE_PATH || '') + '/thank-you';
+        return;
+      }
+      if (res.status === 410) {               // the server's clock says time is up
+        delete pendingSaves[srtId];
+        if (!timerExpired) { timerExpired = true; onTimerExpired(); }
+        return;
+      }
+      delete pendingSaves[srtId];             // 400/404: a retry would not help
+    } catch (_) { /* offline — kept and retried */ }
+  }
+  if (Object.keys(pendingSaves).length) {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(flushServerSaves, 8000);
+  }
+}
+window.addEventListener('online', () => { if (isPqi) flushServerSaves(); });
+
+// Returns 'done' when the attempt is no longer open, so the page moves on.
+async function syncPqiState() {
+  try {
+    const res = await fetch(`/api/session-state/${sessionId}`);
+    if (!res.ok) return;
+    const s = await res.json();
+    if (s.status !== 'in_progress') {
+      window.location.href = (window.BASE_PATH || '') + '/thank-you';
+      return 'done';
+    }
+    const saved = s.answers || {};
+    Object.assign(serverSaved, saved);
+    answerMeta = { ...(s.answer_meta || {}), ...answerMeta };
+    // The server fills any gap; anything written here and not yet saved wins.
+    answers = { ...saved, ...answers };
+    sessionStorage.setItem('rdc_answers', JSON.stringify(answers));
+    sessionStorage.setItem('rdc_answer_meta', JSON.stringify(answerMeta));
+    for (const [srtId, text] of Object.entries(answers)) {
+      if (saved[srtId] !== text) queueServerSave(srtId, text, (answerMeta[srtId] || {}).input || 'typed');
+    }
+    // The deadline is the server's, fixed when the attempt started.
+    sessionStorage.setItem('rdc_deadline_' + sessionId, String(Date.now() + s.remaining_seconds * 1000));
+  } catch (_) { /* offline: carry on with what this tab has */ }
+}
+
 let currentIdx   = 0;
 let voiceMode    = false;
 let isRecording  = false;
@@ -278,6 +397,10 @@ const CIRC = 2 * Math.PI * 50;  // circumference for r=50
     assessmentMinutes = cfg.assessment_minutes || 75;
   } catch (_) {}
   totalTimerSeconds = assessmentMinutes * 60;
+
+  // PQI: the server holds the deadline and the saved answers; take both from it
+  // so a reopened tab or another device continues the same attempt.
+  if (isPqi && (await syncPqiState()) === 'done') return;
 
   // ── Wall-clock deadline: persisted in sessionStorage so reload can't
   //    reset the timer. First-load stamps "now + 60min"; any subsequent
@@ -510,6 +633,7 @@ function saveCurrentAnswer() {
   if (text) {
     answers[q.srt_id] = text;
     sessionStorage.setItem('rdc_answers', JSON.stringify(answers));
+    if (isPqi) queueServerSave(q.srt_id, text, voiceMode ? 'voice' : 'typed');
     const ind = document.getElementById('savedIndicator');
     ind.classList.add('show');
     setTimeout(() => ind.classList.remove('show'), 1500);
@@ -579,7 +703,7 @@ function initVoice() {
   if (!capturedSrtId) return;
 
   recognition = new SR();
-  recognition.lang           = 'en-IN';
+  recognition.lang           = isPqi ? voiceLang : 'en-IN';
   recognition.continuous     = true;
   recognition.interimResults = true;
 
@@ -604,6 +728,7 @@ function initVoice() {
     if (combined) {
       answers[capturedSrtId] = combined;
       sessionStorage.setItem('rdc_answers', JSON.stringify(answers));
+      if (isPqi) queueServerSave(capturedSrtId, combined, 'voice');
       updatePalette();
     }
   };
@@ -666,7 +791,11 @@ function clearVoice() {
   document.getElementById('voiceTranscript').textContent = 'Your spoken response will appear here...';
   document.getElementById('responseText').value = '';
   const q = questions[currentIdx];
-  if (q) { delete answers[q.srt_id]; sessionStorage.setItem('rdc_answers', JSON.stringify(answers)); }
+  if (q) {
+    delete answers[q.srt_id];
+    sessionStorage.setItem('rdc_answers', JSON.stringify(answers));
+    if (isPqi) queueServerSave(q.srt_id, '', 'typed');
+  }
   updatePalette();
 }
 
@@ -689,7 +818,9 @@ async function submitAssessment() {
     const res = await fetch('/api/submit-all', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ session_id: sessionId, answers }),
+      body:    JSON.stringify(isPqi
+        ? { session_id: sessionId, answers, answer_meta: answerMeta }
+        : { session_id: sessionId, answers }),
     });
     if (!res.ok) throw new Error(await res.text());
 
