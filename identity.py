@@ -49,6 +49,32 @@ def identity_configured() -> bool:
     return bool(MASTER_API_URL and MASTER_API_KEY)
 
 
+def test_identity(employee_code: str, email: str) -> dict | None:
+    """A stand-in employee record for testing where there is no portal.
+
+    SRT_TEST_IDENTITIES holds "CODE|e-mail|Full Name|Location" entries separated
+    by semicolons. It is consulted only when identity_configured() is False, so
+    on hr.rdcc.ai, where the portal is configured, it has no effect even if set.
+    As against the real master, the code AND the e-mail must both match.
+    """
+    if identity_configured():
+        return None
+    code = (employee_code or "").strip().casefold()
+    mail = (email or "").strip().casefold()
+    if not code or not mail:
+        return None
+    for entry in (os.environ.get("SRT_TEST_IDENTITIES") or "").split(";"):
+        parts = [p.strip() for p in entry.split("|")]
+        if len(parts) >= 2 and parts[0].casefold() == code and parts[1].casefold() == mail:
+            return {
+                "employee_code": parts[0],
+                "full_name":     parts[2] if len(parts) > 2 and parts[2] else parts[0],
+                "designation":   "Test identity",
+                "location":      parts[3] if len(parts) > 3 else "",
+            }
+    return None
+
+
 def resolve_employee(employee_code: str, email: str) -> dict:
     """Resolve a candidate who must be a known employee, with BOTH fields agreeing.
 

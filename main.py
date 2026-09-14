@@ -923,8 +923,14 @@ async def validate_code(payload: AccessCodeValidate):
 @app.post("/api/identity/lookup")
 async def identity_lookup(payload: IdentityLookup):
     if not identity_configured():
-        # Railway and local dev have no portal. Say so rather than failing in a
-        # way that looks like the candidate got their own details wrong.
+        # Railway and local dev have no portal. A test identity from
+        # SRT_TEST_IDENTITIES may stand in for it there; otherwise say so rather
+        # than failing in a way that looks like the candidate got their own
+        # details wrong.
+        from identity import test_identity
+        stand_in = test_identity(payload.employee_code, payload.email)
+        if stand_in:
+            return stand_in
         raise HTTPException(
             status_code=503,
             detail="The employee directory is not available in this environment.",
