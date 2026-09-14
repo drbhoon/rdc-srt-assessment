@@ -250,8 +250,10 @@ def parse_consistency(valid_ids, data: dict) -> list:
     for item in items:
         if not isinstance(item, dict):
             continue
-        ids = [i for i in (item.get("srt_ids") or []) if i in valid_ids]
-        if len(ids) >= 1 and str(item.get("description", "")).strip():
+        ids = list(dict.fromkeys(i for i in (item.get("srt_ids") or []) if i in valid_ids))
+        # A contradiction is BETWEEN answers (AI_Evaluation_Sequence step 11).
+        # One SRT on its own is not one, however it is described.
+        if len(ids) >= 2 and str(item.get("description", "")).strip():
             out.append({"srt_ids": ids, "description": str(item["description"]).strip()})
     return out
 
