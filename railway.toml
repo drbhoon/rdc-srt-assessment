@@ -2,7 +2,10 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "uvicorn main:app --host 0.0.0.0 --port $PORT"
+# No startCommand: the root Dockerfile is what Railway builds, and its CMD
+# expands ${PORT} through sh. A startCommand here runs WITHOUT a shell, so
+# uvicorn received the literal text "$PORT" and every deploy from 3 Aug 2026
+# failed its healthcheck. (hr.rdcc.ai runs docker compose and ignores this file.)
 healthcheckPath = "/health"
 healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"
