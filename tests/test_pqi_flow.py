@@ -129,7 +129,7 @@ def test_start_freezes_a_balanced_form_and_never_sends_guidance(pqi):
     master = pqi_service.current_master()
     assert (stored["assessment_type"], stored["master_version"], stored["rubric_version"]) == (
         "pqi", "1.0-PILOT", "SRT_Scoring_Rubric_v1")
-    assert stored["master_sha256"] == master["sha256"] and stored["prompt_version"].startswith("pqi-evaluator-1:")
+    assert stored["master_sha256"] == master["sha256"] and stored["prompt_version"].startswith("pqi-evaluator-2:")
     snapshot = stored["srt_snapshot"]
     assert [s["srt_id"] for s in snapshot] == [q["srt_id"] for q in body["questions"]]
     assert generate_form(master, seed=stored["generation_seed"])["srt_ids"] == [s["srt_id"] for s in snapshot]
