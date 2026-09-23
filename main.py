@@ -205,7 +205,20 @@ async def health():
 # ─── API: Config ─────────────────────────────────────────────────────────────
 @app.get("/api/config")
 async def get_config():
-    return {"assessment_minutes": ASSESSMENT_MINUTES}
+    """What the pages need in order to name themselves.
+
+    The engine name is one string for every assessment; everything that names a
+    ROLE comes from the presentation registry, so a new assessment appears on
+    the start page, the exam page and the console without any of them being
+    edited. Nothing here is guidance or scoring material — it is the wording a
+    candidate already sees.
+    """
+    return {
+        "assessment_minutes": ASSESSMENT_MINUTES,
+        "engine_name": assessment_types.ENGINE_NAME,
+        "assessment_order": assessment_types.ORDER,
+        "assessments": assessment_types.presentation_map(),
+    }
 
 # ─── API: Admin Login ────────────────────────────────────────────────────────
 # ─── Admin authentication ────────────────────────────────────────────────────

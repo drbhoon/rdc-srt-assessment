@@ -7,6 +7,7 @@ import pytest
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
+import assessment_types
 import database
 import main
 import pm_fakes as fk
@@ -88,7 +89,18 @@ def test_pages_are_served_with_an_empty_base_path(api, path):
 
 def test_health_and_config(api):
     assert api.get("/health").json() == {"status": "ok", "questions_loaded": 100}
-    assert api.get("/api/config").json() == {"assessment_minutes": 75}
+
+    # /api/config is how every page learns what to call itself: one engine name
+    # for all of them, and one entry per assessment underneath. A page that
+    # cannot read this falls back to the role-free default, so "default" being
+    # present matters as much as the assessments themselves.
+    cfg = api.get("/api/config").json()
+    assert cfg["assessment_minutes"] == 75
+    assert cfg["engine_name"] == assessment_types.ENGINE_NAME
+    assert cfg["assessment_order"] == ["plant_manager", "pqi"]
+    assert set(cfg["assessments"]) == {"default", "plant_manager", "pqi"}
+    assert cfg["assessments"]["plant_manager"]["role"] == "Plant Manager"
+    assert cfg["assessments"]["default"]["role"] == ""
 
 
 # ── Admin authentication ─────────────────────────────────────────────────────

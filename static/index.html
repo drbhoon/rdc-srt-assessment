@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RDC Plant Incharge – Situation Based Competency Assessment</title>
+  <title>RDC – Situation Based Competency Assessment</title>
   <link rel="stylesheet" href="/static/style.css?v=4.23" />
   <style>
     .hero {
@@ -97,7 +97,7 @@
       <img src="/static/rdc-logo.png?v=1" alt="RDC" onerror="this.remove();this.parentNode.classList.add('no-image');" />
     </div>
     <div>
-      <div class="header-title">Plant Incharge Situation Based Competency Assessment Engine (PLANT-PRO)</div>
+      <div class="header-title" id="engineName">RDC – Situation Based Competency Assessment Engine (RDC-KYS)</div>
       <div class="header-sub">Ready-Mix Concrete Operations | Confidential – Head Office Use Only</div>
     </div>
   </div>
@@ -106,25 +106,8 @@
 <div class="hero">
   <div class="hero-badge">CONFIDENTIAL ASSESSMENT TOOL</div>
   <h1>Situation Based Competency Assessment</h1>
-  <p>AI-powered leadership competency evaluation for RMC Plant Incharge candidates.</p>
-  <div class="stats-row">
-    <div class="stat-item">
-      <div class="stat-num">30</div>
-      <div class="stat-lbl">Questions</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-num">10</div>
-      <div class="stat-lbl">Competencies</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-num" id="thirdStatNum">300</div>
-      <div class="stat-lbl" id="thirdStatLbl">Max Score</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-num" id="assessmentTimeStat">75</div>
-      <div class="stat-lbl">Minutes</div>
-    </div>
-  </div>
+  <p>AI-assisted competency evaluation for RMC operations roles.</p>
+  <div class="stats-row" id="statsRow"></div>
 </div>
 
 <div class="container">
@@ -228,16 +211,7 @@
 
   <div class="card">
     <div class="card-title">ℹ️ Assessment Instructions</div>
-    <ul id="instructionsList" style="list-style:disc; padding-left:20px; font-size:14px; line-height:2;">
-      <li>You will be presented with <strong>30 real-world plant situations</strong> one at a time.</li>
-      <li>Read each situation carefully and respond as you would in the actual role.</li>
-      <li>You may <strong>type your response</strong> or use the <strong>voice dictation</strong> feature.</li>
-      <li>Be specific — mention data, systems, team actions, root causes where relevant.</li>
-      <li>Total time allowed: <strong id="assessmentTimeLabel">75 minutes</strong>. A countdown timer is shown at the top.</li>
-      <li>Do not skip questions. All 30 must be answered for a complete report.</li>
-      <li>Your responses are evaluated on: Problem Understanding, Depth, Secondary Awareness, and Structure.</li>
-      <li>After submission, HR will review your results and revert back to you with the outcome.</li>
-    </ul>
+    <ul id="instructionsList" style="list-style:disc; padding-left:20px; font-size:14px; line-height:2;"></ul>
   </div>
 </div>
 
@@ -245,50 +219,55 @@
   // Set today's date as default
   document.getElementById('assessmentDate').value = new Date().toISOString().split('T')[0];
 
-  // Pull the configured assessment duration from the backend so the
-  // instructions card reflects the real value (default 75 min, but
-  // overridable via ASSESSMENT_MINUTES env var).
+  // Every assessment under this engine describes itself on the server, so the
+  // page never hardcodes one of them. Until a code is validated the page shows
+  // the role-free default: the candidate has not yet told us which assessment
+  // they are here for, and the page must not guess.
+  let PRESENTATION = null;
+  let minutes = '75';
+
+  function present(type) {
+    if (!PRESENTATION) return null;
+    return PRESENTATION[type] || PRESENTATION.default || null;
+  }
+
+  function fill(text) {
+    return String(text).split('{minutes}').join(minutes);
+  }
+
+  function render(type) {
+    const p = present(type);
+    if (!p) return;
+    document.title = p.page_title;
+    document.querySelector('.hero p').textContent = p.tagline;
+    document.getElementById('statsRow').innerHTML = (p.stats || []).map(stat =>
+      `<div class="stat-item"><div class="stat-num">${escHtml(fill(stat.num))}</div>` +
+      `<div class="stat-lbl">${escHtml(stat.label)}</div></div>`).join('');
+    // Instruction text is ours, not a candidate's, and deliberately carries
+    // <strong> markup — it is written into innerHTML as authored.
+    document.getElementById('instructionsList').innerHTML =
+      (p.instructions || []).map(item => '<li>' + fill(item) + '</li>').join('');
+  }
+
   fetch('/api/config').then(r => r.ok ? r.json() : null).then(cfg => {
-    if (cfg && cfg.assessment_minutes) {
-      const lbl = document.getElementById('assessmentTimeLabel');
-      if (lbl) lbl.textContent = `${cfg.assessment_minutes} minutes`;
-      const stat = document.getElementById('assessmentTimeStat');
-      if (stat) stat.textContent = String(cfg.assessment_minutes);
-    }
+    if (!cfg) return;
+    if (cfg.assessment_minutes) minutes = String(cfg.assessment_minutes);
+    if (cfg.engine_name) document.getElementById('engineName').textContent = cfg.engine_name;
+    PRESENTATION = cfg.assessments || null;
+    render(validatedType === 'plant_manager' && !validatedCode ? 'default' : validatedType);
   }).catch(() => {});
 
   let validatedCode = '';
 
   // The assessment a validated code starts. The code decides; the candidate
-  // is never offered a choice. Plant Manager leaves the page exactly as it is.
+  // is never offered a choice.
   let validatedType = 'plant_manager';
 
-  const PQI_INSTRUCTIONS = [
-    'You will be presented with <strong>30 real-world quality situations</strong> one at a time.',
-    'Read each situation carefully and respond as you would as the Plant Quality Incharge.',
-    'You may <strong>type your response</strong> or use <strong>voice dictation</strong>. English, Hindi and Hinglish are all fine — for voice, choose English or Hindi speech recognition.',
-    'Be specific: state your decision, the evidence you rely on, who does what, and how you would stop the problem recurring.',
-    'Total time allowed: <strong>{minutes} minutes</strong>. A countdown timer is shown at the top.',
-    'Your answers are saved as you go. If your connection drops, reopen this page and enter the same access code and details to continue where you left off — the timer keeps running from your original start.',
-    'Unanswered questions are scored as zero.',
-    'After submission, HR will review your results and revert back to you with the outcome.',
-  ];
-
+  // The code has named the assessment: show that role's wording. The engine
+  // name above it does not move — one engine, several assessments.
   function applyAssessment(type) {
-    validatedType = type === 'pqi' ? 'pqi' : 'plant_manager';
-    if (validatedType !== 'pqi') return;
-    const name = 'Plant Quality Incharge (PQI) Situation Based Competency Assessment';
-    document.title = 'RDC ' + name;
-    // PQI runs under the RDC-KYS engine name; Plant Manager keeps PLANT-PRO.
-    document.querySelector('.header-title').textContent =
-      'RDC – Situation Based Competency Assessment Engine (RDC-KYS)';
-    document.querySelector('.hero p').textContent =
-      'AI-assisted competency evaluation for RMC Plant Quality Incharge candidates.';
-    document.getElementById('thirdStatNum').textContent = 'EN / हिं';
-    document.getElementById('thirdStatLbl').textContent = 'Voice Languages';
-    const minutes = document.getElementById('assessmentTimeStat').textContent || '75';
-    document.getElementById('instructionsList').innerHTML =
-      PQI_INSTRUCTIONS.map(item => '<li>' + item.replace('{minutes}', minutes) + '</li>').join('');
+    validatedType = PRESENTATION && PRESENTATION[type] ? type : 'plant_manager';
+    render(validatedType);
   }
 
   // Digits-only live filter on the code input

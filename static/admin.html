@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Admin Panel – RDC SRT Assessment</title>
-  <!-- v4.22 — skill v2.5: 9-cap, double-pass extreme-total review, per-competency recognition, top tier gated >250, integrity override, re-baseline batch -->
+  <!-- v4.23 — one engine name; tabs, columns and pickers render from the assessment registry; skill v2.5: 9-cap, double-pass extreme-total review, per-competency recognition, top tier gated >250, integrity override, re-baseline batch -->
   <link rel="stylesheet" href="/static/style.css?v=4.23"/>
   <style>
     body { background: #f0f3f8; }
@@ -282,7 +282,7 @@
       <img src="/static/rdc-logo.png?v=1" alt="RDC" style="max-height:56px;max-width:160px;object-fit:contain;display:block;" onerror="this.remove();this.parentNode.textContent='RDC CONCRETE';this.parentNode.style.padding='6px 18px';" />
     </div>
     <div class="login-title">Admin Panel</div>
-    <div class="login-sub">SRT Assessment Engine (PLANT-PRO) — Authorised Use Only</div>
+    <div class="login-sub">Situation Based Competency Assessment Engine — Authorised Use Only</div>
     <div class="form-group">
       <label>Admin Password</label>
       <input type="password" id="pwInput" placeholder="Enter admin password"
@@ -303,8 +303,8 @@
       </div>
       <div>
         <h1>
-          <span id="dashTitle">RDC – Plant Incharge Situation Based Competency Assessment Engine (PLANT-PRO)</span>
-          <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.22</span>
+          <span id="dashTitle">RDC – Situation Based Competency Assessment Engine (RDC-KYS)</span>
+          <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.23</span>
         </h1>
         <div class="sub">Admin Panel | Confidential – Head Office Use Only</div>
       </div>
@@ -315,10 +315,7 @@
 
   <!-- Which assessment the dashboard shows. HR chooses here; candidates never
        choose — their access code decides. -->
-  <div class="assess-tabs" id="assessTabs">
-    <button class="assess-tab active" id="tab-plant_manager" onclick="setAssessment('plant_manager')">Plant Manager</button>
-    <button class="assess-tab" id="tab-pqi" onclick="setAssessment('pqi')">Plant Quality Incharge (PQI)</button>
-  </div>
+  <div class="assess-tabs" id="assessTabs"></div>
   <div class="pqi-banner" id="pqiBanner"></div>
 
   <div class="stats-row" id="statsRow">
@@ -375,10 +372,7 @@
     </div>
     <div class="form-group">
       <label>Assessment</label>
-      <select id="qt-type" style="width:100%;padding:8px 12px;border:1px solid #d0d9e6;border-radius:7px;font-size:13px;">
-        <option value="plant_manager">Plant Manager</option>
-        <option value="pqi">Plant Quality Incharge (PQI)</option>
-      </select>
+      <select id="qt-type" style="width:100%;padding:8px 12px;border:1px solid #d0d9e6;border-radius:7px;font-size:13px;"></select>
     </div>
     <div class="form-group" style="margin-top:12px;">
       <label>Test Candidate Name</label>
@@ -412,10 +406,7 @@
 
     <div class="form-group">
       <label>Assessment this code starts *</label>
-      <div style="display:flex;gap:18px;font-size:13px;margin-top:4px;">
-        <label style="font-weight:600;"><input type="radio" name="ac-type" value="plant_manager" checked/> Plant Manager</label>
-        <label style="font-weight:600;"><input type="radio" name="ac-type" value="pqi"/> Plant Quality Incharge (PQI)</label>
-      </div>
+      <div style="display:flex;gap:18px;font-size:13px;margin-top:4px;" id="ac-type-choices"></div>
       <div style="font-size:11px;color:var(--grey-mid);margin-top:4px;">The code alone decides the assessment — candidates are never offered a choice.</div>
     </div>
 
@@ -509,35 +500,76 @@ let adminToken   = '';
 let allSessions  = [];
 let currentSid   = '';
 
-// ─── Assessment tabs ─────────────────────────────────────────────────────────
-// Which assessment the dashboard shows, remembered per browser. The Plant
-// Manager tab renders exactly the table and stats it always did.
-let activeAssessment = (() => {
-  try { return localStorage.getItem('rdc_admin_assessment') === 'pqi' ? 'pqi' : 'plant_manager'; }
-  catch (_) { return 'plant_manager'; }
-})();
+// ─── Assessments ─────────────────────────────────────────────────────────────
+// One engine, several assessments under it. Each one describes itself on the
+// server — its name, its table columns, the shape its reports take — so the
+// console gains a tab, a quick-test option and an access-code choice for a new
+// assessment without this file being edited.
+//
+// The engine name above the tabs does NOT follow the tab. It is the umbrella,
+// and it stays put.
+let PRESENTATION = null;
+let TYPE_ORDER   = ['plant_manager'];
+let activeAssessment = 'plant_manager';
 let pqiMasterStatus = null;
 
-const TABLE_HEADERS = {
-  plant_manager: ['#', 'Candidate Name', 'Plant Location', 'Date', 'Created', 'Status', 'Score /300',
-                  'Normalised %', 'Readiness', 'Answered', 'Actions', 'Delete'],
-  pqi:           ['#', 'Candidate Name', 'Plant Location', 'Date', 'Created', 'Status', 'Overall /100',
-                  'Technical', 'Business', 'AFI', 'Readiness', 'Answered', 'Actions', 'Delete'],
-};
+function present(type) {
+  if (!PRESENTATION) return {};
+  return PRESENTATION[type] || PRESENTATION.default || {};
+}
+
+function typeLabel(type) { return present(type).role || type; }
+function typeShort(type) { return present(type).short || typeLabel(type); }
+// Which console shape an assessment reports in. Scoring differs in kind
+// between the two — /300 across ten competencies is not /100 with Technical,
+// Business and AFI — so the console asks what shape this is rather than
+// whether it happens to be PQI.
+function reportStyle(type) { return present(type).report_style || 'plant_manager'; }
+
+async function loadPresentation() {
+  if (PRESENTATION) return;
+  try {
+    const cfg = await fetch('/api/config').then(r => r.ok ? r.json() : null);
+    if (cfg && cfg.assessments) {
+      PRESENTATION = cfg.assessments;
+      TYPE_ORDER   = (cfg.assessment_order || []).filter(t => PRESENTATION[t]);
+      if (!TYPE_ORDER.length) TYPE_ORDER = ['plant_manager'];
+      if (cfg.engine_name) document.getElementById('dashTitle').textContent = cfg.engine_name;
+    }
+  } catch (_) { /* the pickers below then fall back to Plant Manager alone */ }
+
+  let remembered = null;
+  try { remembered = localStorage.getItem('rdc_admin_assessment'); } catch (_) {}
+  activeAssessment = TYPE_ORDER.includes(remembered) ? remembered : TYPE_ORDER[0];
+  renderAssessmentPickers();
+}
+
+// The three places HR picks an assessment, all rendered from the one list.
+function renderAssessmentPickers() {
+  document.getElementById('assessTabs').innerHTML = TYPE_ORDER.map(t =>
+    `<button class="assess-tab" id="tab-${escHtml(t)}" onclick="setAssessment('${escHtml(t)}')">`
+    + `${escHtml(typeLabel(t))}</button>`).join('');
+
+  document.getElementById('qt-type').innerHTML = TYPE_ORDER.map(t =>
+    `<option value="${escHtml(t)}">${escHtml(typeLabel(t))}</option>`).join('');
+
+  document.getElementById('ac-type-choices').innerHTML = TYPE_ORDER.map((t, i) =>
+    `<label style="font-weight:600;"><input type="radio" name="ac-type" value="${escHtml(t)}"`
+    + `${i === 0 ? ' checked' : ''}/> ${escHtml(typeLabel(t))}</label>`).join('');
+}
 
 function setAssessment(type) {
-  activeAssessment = type === 'pqi' ? 'pqi' : 'plant_manager';
+  activeAssessment = TYPE_ORDER.includes(type) ? type : TYPE_ORDER[0];
   try { localStorage.setItem('rdc_admin_assessment', activeAssessment); } catch (_) {}
-  document.getElementById('tab-plant_manager').classList.toggle('active', activeAssessment === 'plant_manager');
-  document.getElementById('tab-pqi').classList.toggle('active', activeAssessment === 'pqi');
-  // The engine name follows the tab: PLANT-PRO for Plant Manager, RDC-KYS for PQI.
-  document.getElementById('dashTitle').textContent = activeAssessment === 'pqi'
-    ? 'RDC – Situation Based Competency Assessment Engine (RDC-KYS)'
-    : 'RDC – Plant Incharge Situation Based Competency Assessment Engine (PLANT-PRO)';
+  TYPE_ORDER.forEach(t => {
+    const tab = document.getElementById(`tab-${t}`);
+    if (tab) tab.classList.toggle('active', t === activeAssessment);
+  });
+  const headers = present(activeAssessment).table_headers || [];
   document.getElementById('sessionsHead').innerHTML =
-    '<tr>' + TABLE_HEADERS[activeAssessment].map(h => `<th>${h}</th>`).join('') + '</tr>';
+    '<tr>' + headers.map(h => `<th>${escHtml(h)}</th>`).join('') + '</tr>';
   document.getElementById('st-avg-label').textContent =
-    activeAssessment === 'pqi' ? 'Avg Overall (/100)' : 'Avg Score (/300)';
+    present(activeAssessment).avg_label || 'Avg Score';
   renderPqiBanner();
   updateStats();
   renderTable();
@@ -627,9 +659,12 @@ window.onload = async () => {
   if (t) { adminToken = t; showDashboard(); }
 };
 
-function showDashboard() {
+// The dashboard cannot lay out its tabs or its columns until it knows which
+// assessments exist, so it waits for the registry before drawing anything.
+async function showDashboard() {
   document.getElementById('loginWrap').style.display  = 'none';
   document.getElementById('dashboard').style.display  = 'block';
+  await loadPresentation();
   setAssessment(activeAssessment);
   loadPqiMaster();
   loadSessions();
@@ -652,7 +687,7 @@ async function loadSessions() {
 
 function updateStats() {
   const list     = sessionsOfActiveType();
-  const isPqiTab = activeAssessment === 'pqi';
+  const isPqiTab = reportStyle(activeAssessment) === 'pqi';
   const total    = list.length;
   const done     = list.filter(s => s.status === 'completed').length;
   const inprog   = total - done;
@@ -713,7 +748,7 @@ function renderTable() {
     const scoreStr    = typeof s.total_score === 'number' ? s.total_score : '—';
     const normStr     = typeof s.normalized === 'number' ? s.normalized.toFixed(1) + '%' : '—';
     // PQI rows show its four headline scores in place of Score /300 and Normalised %.
-    const scoreCells  = activeAssessment === 'pqi' ? pqiScoreCells(s, readyCls) : null;
+    const scoreCells  = reportStyle(activeAssessment) === 'pqi' ? pqiScoreCells(s, readyCls) : null;
 
     // Precise status badge — distinguish in_progress (candidate didn't finish)
     // from processing (pipeline running) from failed (errored) from stuck.
@@ -841,7 +876,7 @@ async function viewReport(sid) {
     });
     if (!res.ok) { alert('Report not available'); return; }
     const d = await res.json();
-    if (d.assessment_type === 'pqi') { showPqiReport(sid, d.candidate, d.report); return; }
+    if (reportStyle(d.assessment_type) === 'pqi') { showPqiReport(sid, d.candidate, d.report); return; }
     populateModal(d.candidate, d.report);
     document.getElementById('reportModal').classList.add('show');
   } catch (e) { alert('Error loading report: ' + e.message); }
@@ -1344,8 +1379,6 @@ function closeAccessCodeModal() {
   document.getElementById('acModal').classList.remove('show');
 }
 
-const TYPE_LABELS = { plant_manager: 'Plant Manager', pqi: 'Plant Quality Incharge (PQI)' };
-
 async function generateAccessCode() {
   const btn    = document.getElementById('ac-gen-btn');
   const label  = document.getElementById('ac-label').value.trim();
@@ -1366,7 +1399,7 @@ async function generateAccessCode() {
 
     document.getElementById('ac-new-code').textContent = d.code;
     document.getElementById('ac-new-meta').textContent =
-      `${TYPE_LABELS[d.assessment_type] || 'Plant Manager'} · ` +
+      `${typeLabel(d.assessment_type)} · ` +
       `${d.max_uses - d.used_count} of ${d.max_uses} slots available` +
       (d.label ? ` · ${d.label}` : '');
     // Common assessment URL — NEVER includes the code (anti-cheating requirement).
@@ -1423,7 +1456,7 @@ async function loadAccessCodes() {
 
       listEl.innerHTML += `
         <div class="ac-list-row">
-          <div class="ac-list-code">${escHtml(c.code)}<span class="type-badge ${c.assessment_type === 'pqi' ? 'pqi' : 'pm'}">${c.assessment_type === 'pqi' ? 'PQI' : 'Plant Manager'}</span></div>
+          <div class="ac-list-code">${escHtml(c.code)}<span class="type-badge ${reportStyle(c.assessment_type) === 'pqi' ? 'pqi' : 'pm'}">${escHtml(typeShort(c.assessment_type))}</span></div>
           <div style="flex:1;font-size:11px;color:var(--grey-mid);">${label || ''}</div>
           <span class="ac-list-usage ${badgeCls}">${used} / ${max}</span>
           <button class="ac-btn-small-del" onclick="deleteAccessCode('${c.code}')" title="Delete this code">🗑</button>

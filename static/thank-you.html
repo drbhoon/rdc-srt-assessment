@@ -82,7 +82,7 @@
     <div class="candidate-info" id="candidateInfo"></div>
 
     <div class="ty-sub">
-      Thank you for completing the <strong>Plant Incharge Situation Based Competency Assessment</strong>.
+      Thank you for completing the <strong id="assessmentName">Situation Based Competency Assessment</strong>.
       Your responses have been recorded and submitted to the evaluation system.
     </div>
 
@@ -98,19 +98,22 @@
     </button>
 
     <div class="ty-footer">
-      RDC Plant Incharge – Situation Based Competency Assessment Engine (PLANT-PRO) &nbsp;|&nbsp; Confidential
+      <span id="engineName">RDC – Situation Based Competency Assessment Engine (RDC-KYS)</span> &nbsp;|&nbsp; Confidential
     </div>
   </div>
 </div>
 
 <script>
-  // PQI shares this page; only the assessment's name differs.
-  if (sessionStorage.getItem('rdc_assessment_type') === 'pqi') {
-    const name = 'Plant Quality Incharge (PQI) Situation Based Competency Assessment';
-    document.querySelector('.ty-sub strong').textContent = name;
-    document.querySelector('.ty-footer').textContent =
-      'RDC – Situation Based Competency Assessment Engine (RDC-KYS) | Confidential';
-  }
+  // Every assessment shares this page. The engine name in the footer is the
+  // same for all of them; only the assessment's own name differs, and that
+  // comes from the registry rather than an if per assessment.
+  const assessmentType = sessionStorage.getItem('rdc_assessment_type') || 'plant_manager';
+  fetch('/api/config').then(r => r.ok ? r.json() : null).then(cfg => {
+    if (!cfg) return;
+    if (cfg.engine_name) document.getElementById('engineName').textContent = cfg.engine_name;
+    const p = (cfg.assessments || {})[assessmentType] || (cfg.assessments || {}).default;
+    if (p) document.getElementById('assessmentName').textContent = p.assessment_name;
+  }).catch(() => {});
 
   // Show candidate info
   const candidate = JSON.parse(sessionStorage.getItem('rdc_candidate') || '{}');

@@ -8,7 +8,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <title>Plant Incharge – SBCA Assessment | RDC</title>
+  <title>Situation Based Competency Assessment | RDC</title>
   <link rel="stylesheet" href="/static/style.css?v=4.23"/>
   <style>
     /* ── Header timer badge ── */
@@ -103,7 +103,7 @@
       <img src="/static/rdc-logo.png?v=1" alt="RDC" onerror="this.remove();this.parentNode.classList.add('no-image');" />
     </div>
     <div style="flex:1">
-      <div class="header-title">Plant Incharge Situation Based Competency Assessment Engine (PLANT-PRO)</div>
+      <div class="header-title" id="engineName">RDC – Situation Based Competency Assessment Engine (RDC-KYS)</div>
       <div class="header-sub" id="candidateHeader">Loading...</div>
     </div>
     <div class="timer-wrap" id="timerDisplay"><span>⏱</span><span id="timerText">--:--</span></div>
@@ -272,14 +272,24 @@ const pendingSaves = {};   // srt_id -> answer not yet confirmed by the server
 const serverSaved  = {};   // srt_id -> text the server last confirmed
 let saveTimer = null;
 
-if (isPqi) {
-  document.title = 'Plant Quality Incharge (PQI) – SRT Assessment | RDC';
-  document.querySelector('.header-title').textContent =
-    'RDC – Situation Based Competency Assessment Engine (RDC-KYS)';
-  document.getElementById('voiceLangWrap').style.display = 'block';
-  document.getElementById('langEn').classList.toggle('active', voiceLang === 'en-IN');
-  document.getElementById('langHi').classList.toggle('active', voiceLang === 'hi-IN');
-}
+// What this paper is CALLED comes from the engine's registry, so a new
+// assessment names itself here without this page being edited. How it is SAT
+// still switches on isPqi below — per-question saving and the submit payload
+// differ in kind, not just in wording.
+const assessmentType = sessionStorage.getItem('rdc_assessment_type') || 'plant_manager';
+
+fetch('/api/config').then(r => r.ok ? r.json() : null).then(cfg => {
+  if (!cfg) return;
+  if (cfg.engine_name) document.getElementById('engineName').textContent = cfg.engine_name;
+  const p = (cfg.assessments || {})[assessmentType] || (cfg.assessments || {}).default;
+  if (!p) return;
+  document.title = p.exam_title;
+  if (p.voice_languages) {
+    document.getElementById('voiceLangWrap').style.display = 'block';
+    document.getElementById('langEn').classList.toggle('active', voiceLang === 'en-IN');
+    document.getElementById('langHi').classList.toggle('active', voiceLang === 'hi-IN');
+  }
+}).catch(() => {});
 
 function setVoiceLang(lang) {
   if (isRecording) stopVoice();
