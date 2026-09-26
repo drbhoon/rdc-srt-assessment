@@ -506,6 +506,7 @@ def list_sessions() -> List[dict]:
                 "normalized":         report.get("normalized_score_out_of_100"),
                 "readiness":          report.get("overall_readiness", "—"),
                 "questions_answered": len(s.get("scores", {})),
+                "progress":           s.get("progress", 0),
                 # Separate from questions_answered — transcripts are preserved
                 # even after a rescore wipes scores to {}, so this is the stable
                 # indicator that a candidate actually completed their 30 answers.
@@ -525,7 +526,7 @@ def list_sessions() -> List[dict]:
                 """SELECT session_id, candidate_name, plant_location, assessment_date,
                           status, scores, report, pdf_data IS NOT NULL, error, created_at,
                           collected_answers, processing_started_at, candidate_type,
-                          assessment_type
+                          assessment_type, progress
                    FROM sessions ORDER BY created_at DESC NULLS LAST, assessment_date DESC"""
             )
             result = []
@@ -546,6 +547,9 @@ def list_sessions() -> List[dict]:
                     "normalized":         (report or {}).get("normalized_score_out_of_100"),
                     "readiness":          (report or {}).get("overall_readiness", "—"),
                     "questions_answered": len(scores),
+                    # Live count while a run is in flight — PQI records it as
+                    # each evaluation completes, before any score is saved.
+                    "progress":           row[14] or 0,
                     "collected_count":    sum(1 for v in collected.values() if (v or "").strip()),
                     "has_pdf":            row[7],
                     "error":              row[8],

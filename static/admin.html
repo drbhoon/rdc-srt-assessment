@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Admin Panel – RDC SRT Assessment</title>
-  <!-- v4.23 — one engine name; tabs, columns and pickers render from the assessment registry; skill v2.5: 9-cap, double-pass extreme-total review, per-competency recognition, top tier gated >250, integrity override, re-baseline batch -->
+  <!-- v4.24 — list refreshes itself while anything runs; live PQI progress; Rescore locked during a run; PQI reports on scale C1 with re-issue. v4.23 — one engine name; tabs, columns and pickers render from the assessment registry; skill v2.5: 9-cap, double-pass extreme-total review, per-competency recognition, top tier gated >250, integrity override, re-baseline batch -->
   <link rel="stylesheet" href="/static/style.css?v=4.23"/>
   <style>
     body { background: #f0f3f8; }
@@ -304,7 +304,7 @@
       <div>
         <h1>
           <span id="dashTitle">RDC – Situation Based Competency Assessment Engine (RDC-KYS)</span>
-          <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.23</span>
+          <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.24</span>
         </h1>
         <div class="sub">Admin Panel | Confidential – Head Office Use Only</div>
       </div>
@@ -331,6 +331,7 @@
     <button class="btn btn-outline btn-sm" onclick="openAccessCodeModal()" title="Generate a 10-digit access code HR can share with up to 10 candidates">+ New Assessment</button>
     <button class="btn btn-primary btn-sm" onclick="openQuickTest()" title="Run a full pipeline test without answering 30 questions">🧪 Quick Test</button>
     <button class="btn-rescore-bulk" onclick="rescoreAllStuck()" title="Rescue every session that has all 30 answers but is stuck 'In Progress'. Uses stored transcripts — no candidate involvement. Processes 2 at a time.">🚑 Rescore All Stuck</button>
+    <button class="btn-rescore-bulk" id="reissueAllBtn" style="background:#16a085;display:none;" onclick="reissueAllPqi()" title="Re-issue every completed PQI report that is not yet on the current score scale. Uses the stored evaluations — nothing is re-evaluated; one AI call per report for the narrative.">↻ Re-issue all on new scale</button>
     <button class="btn-rescore-bulk" style="background:#8e44ad;" onclick="rescoreValidationBatch()" title="RE-BASELINE: force-full rescore ALL completed sessions under the current skill (v2.5). Wipes prior scores so every question is re-scored fresh. ~30 calls/candidate — slow and uses API quota. Use after a skill calibration change.">⟳⟳ Re-baseline All</button>
   </div>
 
@@ -510,6 +511,7 @@ let currentSid   = '';
 // and it stays put.
 let PRESENTATION = null;
 let TYPE_ORDER   = ['plant_manager'];
+let PQI_SCALE    = null;   // name of the score scale new PQI reports are issued on
 let activeAssessment = 'plant_manager';
 let pqiMasterStatus = null;
 
@@ -536,6 +538,7 @@ async function loadPresentation() {
       if (!TYPE_ORDER.length) TYPE_ORDER = ['plant_manager'];
       if (cfg.engine_name) document.getElementById('dashTitle').textContent = cfg.engine_name;
     }
+    if (cfg && cfg.pqi_score_scale) PQI_SCALE = cfg.pqi_score_scale;
   } catch (_) { /* the pickers below then fall back to Plant Manager alone */ }
 
   let remembered = null;
@@ -570,6 +573,7 @@ function setAssessment(type) {
     '<tr>' + headers.map(h => `<th>${escHtml(h)}</th>`).join('') + '</tr>';
   document.getElementById('st-avg-label').textContent =
     present(activeAssessment).avg_label || 'Avg Score';
+  document.getElementById('reissueAllBtn').style.display = reportStyle(activeAssessment) === 'pqi' ? '' : 'none';
   renderPqiBanner();
   updateStats();
   renderTable();
@@ -683,6 +687,22 @@ async function loadSessions() {
   } catch (e) {
     console.error('Load error', e);
   }
+  scheduleAutoRefresh();
+}
+
+// The list used to show whatever was true when the page loaded, so a run that
+// had finished still read "Processing" until someone pressed F5 — and people
+// pressed Rescore instead, queueing a second run of the same session. While
+// any session is processing, the list now reloads itself every 15 seconds,
+// and stops once nothing is running. It keeps going in a background tab too:
+// one small request every 15 seconds is nothing, and some embedded browsers
+// never report a tab becoming visible again, which would leave it frozen.
+let autoRefreshTimer = null;
+function scheduleAutoRefresh() {
+  clearTimeout(autoRefreshTimer);
+  autoRefreshTimer = null;
+  if (!allSessions.some(s => s.status === 'processing')) return;
+  autoRefreshTimer = setTimeout(loadSessions, 15000);
 }
 
 function updateStats() {
@@ -737,7 +757,20 @@ function renderTable() {
     // handles empty answers by returning 0 immediately without an API call,
     // so a partial submit (e.g. Sateshwar's 21/30) still produces a usable
     // report (just with 0s for the unanswered questions).
-    const canRescore  = hasAnyAnsw;
+    // Minutes since the run last did something. PQI moves processing_started_at
+    // forward on every completed evaluation, so this is "time since the last
+    // step", not total run time; Plant Manager runs are short enough that the
+    // two are the same.
+    let mins = null;
+    if (isProcessing && s.processing_started_at) {
+      const startMs = new Date(s.processing_started_at).getTime();
+      if (!isNaN(startMs)) mins = Math.floor((Date.now() - startMs) / 60000);
+    }
+    // A run that is alive (a step within the last 5 minutes) cannot be
+    // rescored: each press used to reset the clock and queue another run of
+    // the same session. Once it has gone quiet, Rescore is offered again.
+    const isRunning   = isProcessing && mins !== null && mins < 5;
+    const canRescore  = hasAnyAnsw && !isRunning;
     // Reset wipes transcripts — only offer it when the candidate has
     // literally zero stored answers. Never show on rows that have any work
     // the candidate submitted.
@@ -759,22 +792,19 @@ function renderTable() {
       const errTip = s.error ? escHtml(s.error) : 'Pipeline failed — click Rescore to retry';
       badgeHtml = `<span class="badge-failed" title="${errTip}">❌ Failed</span>`;
     } else if (isProcessing && hasFullAnsw) {
-      // v4.20: differentiate "running" from "actually stuck" using
-      // processing_started_at duration. <5 min = likely running. >5 min = stuck.
-      let mins = null;
-      if (s.processing_started_at) {
-        const startMs = new Date(s.processing_started_at).getTime();
-        if (!isNaN(startMs)) mins = Math.floor((Date.now() - startMs) / 60000);
-      }
-      if (mins !== null && mins < 5) {
-        badgeHtml = `<span class="badge-processing" title="Pipeline is running now — started ${mins} min ago">🔄 Processing (${mins}m)</span>`;
+      // v4.20: differentiate "running" from "actually stuck" using the time
+      // since the last recorded step. <5 min = running. >5 min = stuck.
+      if (isRunning) {
+        const step = (s.progress || 0) > 0 ? ` ${s.progress}/30` : '';
+        badgeHtml = `<span class="badge-processing" title="Running now — last step ${mins} min ago. This list refreshes itself.">🔄 Processing${step}</span>`;
       } else if (mins !== null) {
         badgeHtml = `<span class="badge-stuck" title="Stuck for ${mins} minutes — pipeline likely died (deploy/OOM). Watchdog auto-fails sessions stuck >15 min so you can Rescore without manual Clear Lock.">⏱ Stuck (${mins}m)</span>`;
       } else {
         badgeHtml = `<span class="badge-stuck" title="All 30 answers submitted but status is still 'processing'. Watchdog will auto-fail this within 15 min so you can click 🔁 Rescore.">⏱ Stuck (processing)</span>`;
       }
     } else if (isProcessing) {
-      badgeHtml = `<span class="badge-processing" title="Pipeline is running now — AI scoring in flight">🔄 Processing</span>`;
+      const step = (s.progress || 0) > 0 ? ` ${s.progress}/30` : '';
+      badgeHtml = `<span class="badge-processing" title="Pipeline is running now — AI scoring in flight">🔄 Processing${step}</span>`;
     } else {
       // in_progress — candidate started but hasn't submitted
       badgeHtml = `<span class="badge-progress" title="Candidate has not yet submitted all 30 answers">⏳ In Progress</span>`;
@@ -791,13 +821,14 @@ function renderTable() {
         ${scoreCells !== null ? scoreCells : `<td style="font-weight:700;color:var(--blue);">${scoreStr}</td>
         <td>${normStr}</td>
         <td class="${readyCls}">${escHtml(s.readiness || '—')}</td>`}
-        <td title="Scored: ${s.questions_answered}/30 · Transcripts in DB: ${transcripts}/30">${s.questions_answered} / 30${transcripts > s.questions_answered ? ` <span style="color:#1a7a1a;font-size:10px;">(${transcripts} saved)</span>` : ''}</td>
+        <td title="Scored: ${isProcessing ? (s.progress || 0) : s.questions_answered}/30 · Transcripts in DB: ${transcripts}/30">${isProcessing ? (s.progress || 0) : s.questions_answered} / 30${transcripts > s.questions_answered ? ` <span style="color:#1a7a1a;font-size:10px;">(${transcripts} saved)</span>` : ''}</td>
         <td>
           ${isDone ? `<button class="btn-view" onclick="viewReport('${s.session_id}')">👁 View</button>` : ''}
           <button class="btn-pdf ${s.has_pdf ? '' : 'disabled'}"
             onclick="${s.has_pdf ? `downloadPdfFor('${s.session_id}')` : ''}"
             title="${s.has_pdf ? 'Download PDF' : 'PDF not available'}">⬇️ PDF</button>
           ${canRescore ? `<button class="btn-rescore" onclick="rescoreSession('${s.session_id}','${escHtml(s.candidate_name)}')" title="${isDone ? 'Smart resume — re-runs only errored/missing questions (preserves valid prior scores)' : (hasFullAnsw ? 'Session got stuck mid-pipeline. All 30 answers are safe — click to resume cleanly from stored transcripts.' : `Partial submit: ${transcripts}/30 answers stored. Rescore will use what's there; unanswered questions score 0.`)}">🔁 Rescore</button>` : ''}
+          ${isDone && reportStyle(s.assessment_type) === 'pqi' && PQI_SCALE && (s.pqi_headline || {}).scale !== PQI_SCALE ? `<button class="btn-rescore" style="background:#16a085;" onclick="reissuePqi('${s.session_id}','${escHtml(s.candidate_name)}')" title="Re-issue this report on the current score scale. Uses the stored evaluations — nothing is re-evaluated.">↻ New scale</button>` : ''}
           ${canRescore && isDone ? `<button class="btn-rescore" style="background:#8e44ad;" onclick="forceFullRescoreSession('${s.session_id}','${escHtml(s.candidate_name)}')" title="Force full rescore — WIPES all 30 prior scores and re-runs every question under the latest skill prompt. Use after a calibration change.">⟳⟳ Full</button>` : ''}
           ${canClearLock ? `<button class="btn-clearlock" onclick="clearLock('${s.session_id}','${escHtml(s.candidate_name)}')" title="Clear the 'processing' lock so you can Rescore. Use when a deploy killed the pipeline mid-run and the session is now hung.">🔓 Clear Lock</button>` : ''}
           <button class="btn-diagnose" onclick="diagnoseSession('${s.session_id}','${escHtml(s.candidate_name)}')" title="Show detailed backend state for this session (status, progress, errors, transcript count, scoring errors)">🔍 Diagnose</button>
@@ -967,11 +998,15 @@ function showPqiReport(sid, cand, r) {
   const box = (num, lbl, cls) =>
     `<div class="score-box-sm"><div class="num ${cls || ''}">${num}</div><div class="lbl">${lbl}</div></div>`;
 
+  // Reports on a score scale carry competency scores as percentages; older
+  // ones carry the average level out of 10.
+  const compMax = r.score_scale ? 100 : 10;
   const comps = (r.competency_scores || []).map(c => {
-    const col = c.score >= 8 ? '#1a7a1a' : c.score >= 6 ? '#0055aa' : c.score >= 4 ? '#cc7700' : '#cc0000';
+    const pct = (c.score / compMax) * 10;
+    const col = pct >= 8 ? '#1a7a1a' : pct >= 6 ? '#0055aa' : pct >= 4 ? '#cc7700' : '#cc0000';
     return `<div class="comp-modal-row">
         <div class="comp-modal-name">${e(c.code)} · ${e(c.name)} <span style="color:#999;font-size:11px;">${e(c.lens)} ×${c.weight}</span></div>
-        <div class="comp-modal-bar"><div class="comp-modal-fill" style="width:${(c.score / 10) * 100}%;background:${col};"></div></div>
+        <div class="comp-modal-bar"><div class="comp-modal-fill" style="width:${(c.score / compMax) * 100}%;background:${col};"></div></div>
         <div class="comp-modal-score">${fmt1(c.score)}</div>
       </div>`;
   }).join('');
@@ -1017,7 +1052,8 @@ function showPqiReport(sid, cand, r) {
       <div class="score-box-sm"><div class="num ${readinessClass(r.overall_readiness)}" style="font-size:15px;">${e(r.overall_readiness || '—')}</div><div class="lbl">Readiness (provisional)</div></div>
     </div>
     ${alerts.join('')}
-    <div class="pqi-section"><h4>Competency Profile (/10)</h4>${comps}</div>
+    ${r.score_scale ? `<div style="font-size:12px;color:var(--grey-mid);margin:4px 0 8px;">Scores on ${e(r.score_scale.label || r.score_scale.name)}. Master's own scale (level × 10): overall ${fmt1((r.native_scores || {}).overall)} — readiness is decided on that.</div>` : ''}
+    <div class="pqi-section"><h4>Competency Profile (/${compMax})</h4>${comps}</div>
     <div style="display:flex;gap:16px;flex-wrap:wrap;">
       <div class="pqi-section" style="flex:1;min-width:240px;"><h4>Top Strengths</h4><ul style="font-size:13px;padding-left:18px;margin:0;">${items(r.top_strengths)}</ul></div>
       <div class="pqi-section" style="flex:1;min-width:240px;"><h4>Development Priorities</h4><ul style="font-size:13px;padding-left:18px;margin:0;">${items(r.development_priorities)}</ul></div>
@@ -1132,6 +1168,31 @@ async function rescoreSession(sid, name) {
 }
 
 // ─── Force-full rescore (wipes prior scores) ─────────────────────────────────
+// Re-issue PQI reports on the current score scale. Stored evaluations are
+// reused as they are; only the percentages, the narrative and the PDF change.
+async function reissuePqi(sid, name) {
+  if (!confirm(`Re-issue the report for "${name}" on the current score scale?\n\n` +
+               `Nothing is re-evaluated: the same levels and readiness, new percentages, ` +
+               `a fresh narrative and PDF. About a minute.`)) return;
+  try {
+    const res = await fetch(`/api/admin/pqi/reissue/${sid}`, { method: 'POST', headers: { 'X-Admin-Token': adminToken } });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
+    await loadSessions();
+  } catch (e) { alert('Re-issue failed: ' + e.message); }
+}
+
+async function reissueAllPqi() {
+  if (!confirm('Re-issue every completed PQI report that is not yet on the current score scale?\n\n' +
+               'Nothing is re-evaluated. Two run at a time; the list updates itself as each finishes.')) return;
+  try {
+    const res = await fetch('/api/admin/pqi/reissue-all', { method: 'POST', headers: { 'X-Admin-Token': adminToken } });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
+    const d = await res.json();
+    alert(d.queued.length ? `Re-issuing ${d.queued.length} report(s) on scale ${d.scale}.` : 'Every PQI report is already on the current scale.');
+    await loadSessions();
+  } catch (e) { alert('Re-issue failed: ' + e.message); }
+}
+
 // Used after a skill prompt calibration change so the new prompt applies
 // to ALL 30 questions, not just the ones that previously errored.
 async function forceFullRescoreSession(sid, name) {

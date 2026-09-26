@@ -273,6 +273,33 @@ def _compat(result: dict, srt: dict) -> dict:
     }
 
 
+def _heartbeat(session_id: str, session: dict, progress: int | None = None) -> None:
+    """Record that the run is alive, and how far it has got.
+
+    A full PQI run is 30 evaluations, a consistency check, often a second
+    review of all 30, and a report — 10 to 15 minutes. The stuck-run sweep
+    (database.auto_fail_stale_processing) fails anything whose
+    processing_started_at is older than 15 minutes, and it runs every time the
+    console loads its list; with the console now refreshing itself, it would
+    have cut genuine runs down mid-way. So for PQI, processing_started_at is
+    moved forward on every completed step and the sweep measures SILENCE, not
+    total duration: a run that is still producing evaluations is never failed,
+    one that has stopped is failed as before.
+
+    Progress is persisted here too, so the console shows 7/30, 8/30 ... rather
+    than 0/30 until the whole first pass is over. Best effort: a failed write
+    must never stop the run.
+    """
+    fields = {"processing_started_at": datetime.now(timezone.utc)}
+    if progress is not None:
+        fields["progress"] = progress
+        session["progress"] = progress
+    try:
+        database.update_session(session_id, **fields)
+    except Exception:
+        logger.warning("Could not record progress for %s", session_id, exc_info=True)
+
+
 def _fail(session_id, session, message):
     logger.error("PQI pipeline failed for %s: %s", session_id, message)
     session["status"], session["error"] = "failed", message
@@ -353,7 +380,7 @@ async def _run(session_id: str, session: dict, client) -> None:
                 result = scoring.apply_rules(master, srt, observed)
         result.update(_compat(result, srt), **{"pass": "first", "reviewed": False})
         results[srt_id] = result
-        session["progress"] = len(results)
+        _heartbeat(session_id, session, len(results))
         log(srt, "first", result["status"], text, meta, raw, result)
 
     await asyncio.gather(*(first_pass(s) for s in snapshot if s["srt_id"] not in results))
@@ -405,6 +432,7 @@ async def _run(session_id: str, session: dict, client) -> None:
                                                     "decision_made", "critical_failure", "afi_evidence_level")},
         })
         results[srt_id] = reviewed
+        _heartbeat(session_id, session)
         if (reviewed["final_score"], reviewed["critical_failure"], reviewed["afi_evidence_level"]) != (
                 earlier["final_score"], earlier["critical_failure"], earlier["afi_evidence_level"]):
             changes.append({"srt_id": srt_id, "from_score": earlier["final_score"], "to_score": reviewed["final_score"],
@@ -422,6 +450,7 @@ async def _run(session_id: str, session: dict, client) -> None:
     ready = scoring.readiness(master, head, ordered, review_failures)
 
     # ── Narrative ────────────────────────────────────────────────────────────
+    _heartbeat(session_id, session)
     report = build_report(master, session, snapshot, ordered, head, ready, plan, changes, review_failures,
                           consistency, answers, metas)
     try:
@@ -445,7 +474,72 @@ async def _run(session_id: str, session: dict, client) -> None:
 
     session["status"] = "completed"
     database.update_session(session_id, status="completed", processing_started_at=None)
-    logger.info("PQI attempt %s completed: overall %.1f, readiness %s", session_id, head["overall"], ready["band"])
+    logger.info("PQI attempt %s completed: overall %.1f on scale %s (%.1f native), readiness %s", session_id,
+                report["overall_pqi_score"], report["score_scale"]["name"], head["overall"], ready["band"])
+
+
+async def reissue_report(session_id: str, session: dict, client) -> None:
+    """Issue a finished attempt's report again on the current score scale.
+
+    Nothing is evaluated again. The SRT levels, the second review's outcome and
+    the readiness decision are exactly the ones already recorded, so the
+    percentages move only by the scale. What is produced afresh: the reported
+    numbers, the narrative (one AI call, so its text cites the figures now
+    printed beside it) and the PDF.
+
+    If anything fails, the report that was there stays there and the attempt
+    goes back to completed with the reason in its error field — a re-issue can
+    never leave a candidate with less than they had.
+    """
+    previous = session.get("report") or {}
+
+    def give_up(message):
+        logger.error("PQI re-issue failed for %s: %s", session_id, message)
+        session.update(status="completed", error=f"Re-issue failed: {message}")
+        database.update_session(session_id, status="completed", error=session["error"], processing_started_at=None)
+
+    try:
+        master = master_for_session(session)
+    except PqiUnavailable as exc:
+        give_up(f"PQI master unavailable: {exc}")
+        return
+    snapshot = session.get("srt_snapshot") or []
+    scores = session.get("scores") or {}
+    if not previous or not snapshot or any(s["srt_id"] not in scores for s in snapshot):
+        give_up("this attempt has no complete set of stored evaluations to re-issue from.")
+        return
+
+    ordered = [scores[s["srt_id"]] for s in snapshot]
+    review = previous.get("second_review") or {}
+    failures = review.get("failures") or []
+    plan = {"triggers": review.get("triggers") or [], "srts": {}}
+    consistency = previous.get("consistency_check") or {"status": "skipped", "contradictions": []}
+    head = scoring.headline(master, ordered)
+    ready = scoring.readiness(master, head, ordered, failures)
+    answers = session.get("collected_answers") or {}
+    report = build_report(master, session, snapshot, ordered, head, ready, plan, review.get("changes") or [],
+                          failures, consistency, answers, session.get("answer_meta") or {})
+    _heartbeat(session_id, session)
+    try:
+        _, narrative = await asyncio.to_thread(evaluator.write_report, client, master, narrative_input(report),
+                                               [s["srt_id"] for s in snapshot])
+    except evaluator.EvaluatorError as exc:
+        give_up(f"report narrative: {exc}")
+        return
+    report.update(narrative)
+    report["reissued_from"] = {"generated_at": previous.get("generated_at"),
+                               "score_scale": (previous.get("score_scale") or {}).get("name", "native (level x 10)")}
+    try:
+        pdf = await asyncio.to_thread(generate_pqi_pdf, report, session["candidate"])
+    except Exception as exc:
+        logger.exception("PQI PDF failed during re-issue for %s", session_id)
+        give_up(f"PDF: {exc}")
+        return
+    session.update(report=report, pdf_bytes=pdf, pdf_error=None, error=None, status="completed")
+    database.update_session(session_id, report=report, pdf_bytes=pdf, pdf_error=None, error=None,
+                            status="completed", processing_started_at=None)
+    logger.info("PQI report %s re-issued on scale %s: overall %.1f (was %s)", session_id,
+                report["score_scale"]["name"], report["overall_pqi_score"], previous.get("overall_pqi_score"))
 
 
 def _r1(value):
@@ -463,7 +557,13 @@ def build_report(master, session, snapshot, ordered, head, ready, plan, changes,
         "type": results[s["srt_id"]]["critical_failure_type"],
         "reason": results[s["srt_id"]]["critical_failure_reason"],
     } for s in snapshot if results[s["srt_id"]]["critical_failure"]]
-    competency_scores = [{**{k: c[k] for k in ("code", "name", "lens", "weight", "srt_ids")}, "score": _r1(c["score"])}
+    # Printed numbers are on the reported scale; the native (level x 10)
+    # figures are kept beside them, because readiness and the second review
+    # were decided on those.
+    reported = scoring.reported_headline(master, ordered)
+    competency_scores = [{**{k: c[k] for k in ("code", "name", "lens", "weight", "srt_ids")},
+                          "score": _r1(reported["competencies"][c["code"]]),
+                          "level_average": _r1(c["score"])}
                          for c in head["competencies"]]
     srt_results = []
     for s in snapshot:
@@ -475,22 +575,29 @@ def build_report(master, session, snapshot, ordered, head, ready, plan, changes,
             **{k: v for k, v in r.items() if k not in ("competency", "score", "strengths", "improvements")},
         })
     headline = {
-        "overall": _r1(head["overall"]), "technical": _r1(head["technical_acumen"]),
-        "business": _r1(head["business_acumen"]), "afi": _r1(head["afi"]), "readiness": ready["band"],
+        "overall": _r1(reported["overall"]), "technical": _r1(reported["technical_acumen"]),
+        "business": _r1(reported["business_acumen"]), "afi": _r1(head["afi"]), "readiness": ready["band"],
         "manual_review": ready["manual_review_required"], "critical_flags": len(flags),
+        "scale": reported["scale"]["name"], "native_overall": _r1(head["overall"]),
     }
     return {
         "assessment_type":         PQI,
-        "report_version":          1,
+        "report_version":          2,
         "master": {k: master[k] for k in ("file_name", "sha256", "version", "rubric_version", "status", "effective_date")},
         "prompt_version":          session.get("prompt_version"),
         "evaluator_model":         evaluator.PQI_EVALUATOR_MODEL,
         "report_model":            evaluator.PQI_REPORT_MODEL,
-        "overall_pqi_score":       _r1(head["overall"]),
-        "overall_exact":           head["overall"],
-        "overall_attainable_max":  master["overall_max"],
-        "technical_acumen":        _r1(head["technical_acumen"]),
-        "business_acumen":         _r1(head["business_acumen"]),
+        "overall_pqi_score":       _r1(reported["overall"]),
+        "overall_exact":           reported["overall"],
+        "overall_attainable_max":  reported["scale"]["max"],
+        "technical_acumen":        _r1(reported["technical_acumen"]),
+        "business_acumen":         _r1(reported["business_acumen"]),
+        "score_scale":             reported["scale"],
+        "native_scores": {
+            "overall": _r1(head["overall"]), "technical": _r1(head["technical_acumen"]),
+            "business": _r1(head["business_acumen"]), "attainable_max": master["overall_max"],
+            "note": "Level x 10, the master's own scale. Readiness and the second review are decided on these.",
+        },
         "anti_firefighting_index": _r1(head["afi"]),
         "afi_band":                head["afi_band"],
         "afi_scored_srts":         head["afi_scored_srts"],
@@ -523,7 +630,10 @@ def narrative_input(report: dict) -> dict:
         "AFI_Interpretation": report["afi_band"],
         "Readiness": report["overall_readiness"],
         "Readiness_Guardrails": report["readiness"]["caps"],
-        "Competency_Scores": [{"Code": c["code"], "Competency": c["name"], "Score_out_of_10": c["score"]}
+        "Score_Scale": (f"Overall, acumen and competency scores are percentages on {report['score_scale']['label']}, "
+                        "which converts each SRT level (0-9) to a percentage and then averages. Final_SRT_Score below "
+                        "is still the SRT level on the 0-9 scale. Quote each on its own scale."),
+        "Competency_Scores": [{"Code": c["code"], "Competency": c["name"], "Score_out_of_100": c["score"]}
                               for c in report["competency_scores"]],
         "Critical_Flags": [{"SRT_ID": f["srt_id"], "Severity": f["severity"], "Reason": f["reason"]}
                            for f in report["critical_flags"]],

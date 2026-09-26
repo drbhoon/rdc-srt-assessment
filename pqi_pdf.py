@@ -109,7 +109,18 @@ def generate_pqi_pdf(report: dict, candidate: dict) -> bytes:
                                 ("LINEAFTER", (0, 0), (2, -1), 0.5, colors.lightgrey),
                                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                                 ("TOPPADDING", (0, 0), (-1, -1), 7), ("BOTTOMPADDING", (0, 0), (-1, -1), 7)]))
-    story += [scores, Spacer(1, 0.25 * cm)]
+    story += [scores]
+    # Which scale the percentages are on. Reports issued before HR's scale C1
+    # have no score_scale and read level x 10, so they print nothing here.
+    scale = report.get("score_scale") or {}
+    if scale:
+        native = report.get("native_scores") or {}
+        story.append(Paragraph(
+            f"Scores are percentages on {_esc(scale.get('label', scale.get('name', '')))}: each situation's level "
+            f"(0–9) counts as {', '.join(str(p) for p in scale.get('points', []))}%, averaged within each "
+            f"competency. On the master's own scale (level × 10) the overall is {_num(native.get('overall'))}; "
+            "readiness is decided on that scale.", small))
+    story.append(Spacer(1, 0.25 * cm))
 
     ready_rows = [[Paragraph(f"Readiness: {_esc(band)}", sty("PR", fontName="Helvetica-Bold", fontSize=14,
                                                               textColor=band_colour, alignment=TA_CENTER))]]
@@ -135,7 +146,8 @@ def generate_pqi_pdf(report: dict, candidate: dict) -> bytes:
     # 3. Competency profile
     story.append(_sec("3.  Competency Profile", sec))
     rows = [[Paragraph("<b>Code</b>", label), Paragraph("<b>Competency</b>", label),
-             Paragraph("<b>Lens</b>", label), Paragraph("<b>Score /10</b>", label)]]
+             Paragraph("<b>Lens</b>", label),
+             Paragraph("<b>Score /100</b>" if scale else "<b>Score /10</b>", label)]]
     for c in report.get("competency_scores") or []:
         rows.append([Paragraph(_esc(c["code"]), value), Paragraph(_esc(c["name"]), value),
                      Paragraph(_esc(f"{c['lens']} ×{c['weight']:g}"), value), Paragraph(_num(c["score"]), value)])

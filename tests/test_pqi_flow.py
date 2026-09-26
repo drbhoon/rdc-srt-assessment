@@ -219,10 +219,17 @@ def test_full_submission_produces_the_report(pqi):
 
     ordered = [scores[s["srt_id"]] for s in snapshot]
     head = pqi_scoring.headline(master, ordered)
-    assert report["overall_pqi_score"] == round(head["overall"], 1)
-    assert report["technical_acumen"] == round(head["technical_acumen"], 1)
-    assert report["business_acumen"] == round(head["business_acumen"], 1)
-    assert report["anti_firefighting_index"] == round(head["afi"], 1)
+    shown = pqi_scoring.reported_headline(master, ordered)
+    # Printed on the current scale; the master's native figures are kept beside
+    # them, and readiness is still decided on the native ones.
+    assert report["score_scale"]["name"] == pqi_scoring.CURRENT_SCALE and report["overall_attainable_max"] == 100
+    assert report["overall_pqi_score"] == round(shown["overall"], 1)
+    assert report["technical_acumen"] == round(shown["technical_acumen"], 1)
+    assert report["business_acumen"] == round(shown["business_acumen"], 1)
+    assert report["native_scores"]["overall"] == round(head["overall"], 1)
+    assert [c["score"] for c in report["competency_scores"]] == [round(shown["competencies"][c["code"]], 1)
+                                                                 for c in master["competencies"]]
+    assert report["anti_firefighting_index"] == round(head["afi"], 1)      # AFI is not on the scale
     assert report["afi_scored_srts"] == sum(1 for r in ordered if r["afi_activated"])
     assert report["overall_readiness"] == pqi_scoring.readiness(master, head, ordered)["band"]
     assert [r["srt_id"] for r in report["srt_results"]] == [s["srt_id"] for s in snapshot]
@@ -237,6 +244,7 @@ def test_full_submission_produces_the_report(pqi):
 
     row = next(r for r in pqi.get("/api/admin/sessions", headers=ADMIN).json() if r["session_id"] == sid)
     assert row["assessment_type"] == "pqi" and row["pqi_headline"]["overall"] == report["overall_pqi_score"]
+    assert row["pqi_headline"]["scale"] == pqi_scoring.CURRENT_SCALE and row["progress"] == 30
     assert row["readiness"] == report["overall_readiness"]
     detail = pqi.get(f"/api/admin/report/{sid}", headers=ADMIN).json()
     assert detail["assessment_type"] == "pqi"
@@ -380,6 +388,58 @@ def test_evaluation_errors_fail_the_session_and_rescore_resumes(pqi, monkeypatch
     assert r.status_code == 200
     assert pqi.fake.srt_ids("evaluate") == [broken_id]
     assert session(sid)["status"] == "completed"
+
+
+# ── Re-issuing a report on the current scale ─────────────────────────────────
+def test_reissue_rebuilds_the_report_without_evaluating_again(pqi, monkeypatch):
+    sid = start(pqi, new_code(pqi)).json()["session_id"]
+    answer_all(pqi, sid)
+    before = session(sid)
+    # Make it look like a report issued before the scale existed.
+    old = dict(before["report"])
+    for key in ("score_scale", "native_scores"):
+        old.pop(key)
+    old["headline"] = {k: v for k, v in old["headline"].items() if k != "scale"}
+    old["overall_pqi_score"] = before["report"]["native_scores"]["overall"]
+    database.update_session(sid, report=old)
+    main._cache.pop(sid, None)
+
+    row = next(r for r in pqi.get("/api/admin/sessions", headers=ADMIN).json() if r["session_id"] == sid)
+    assert "scale" not in row["pqi_headline"]
+
+    use_claude(pqi, monkeypatch, pf.FakePqiClaude())
+    queued = pqi.post("/api/admin/pqi/reissue-all", headers=ADMIN).json()
+    assert [q["session_id"] for q in queued["queued"]] == [sid]
+
+    after = session(sid)
+    assert after["status"] == "completed" and not after.get("error")
+    # One narrative call; nothing evaluated, reviewed or cross-checked again.
+    assert pqi.fake.modes() == ["report"]
+    assert after["scores"] == before["scores"]
+    assert after["report"]["score_scale"]["name"] == pqi_scoring.CURRENT_SCALE
+    assert after["report"]["overall_pqi_score"] == before["report"]["overall_pqi_score"]
+    assert after["report"]["overall_readiness"] == before["report"]["overall_readiness"]
+    assert after["report"]["reissued_from"]["score_scale"] == "native (level x 10)"
+    assert session(sid).get("pdf_bytes")
+
+    # Already on the current scale: nothing to do.
+    assert pqi.post("/api/admin/pqi/reissue-all", headers=ADMIN).json()["queued"] == []
+
+
+def test_a_failed_reissue_keeps_the_report_that_was_there(pqi, monkeypatch):
+    sid = start(pqi, new_code(pqi)).json()["session_id"]
+    answer_all(pqi, sid)
+    before = session(sid)["report"]
+    use_claude(pqi, monkeypatch, pf.FakePqiClaude(report=lambda p: {"top_strengths": "not a list"}))
+    assert pqi.post(f"/api/admin/pqi/reissue/{sid}", headers=ADMIN).status_code == 200
+    after = session(sid)
+    assert after["status"] == "completed" and after["error"].startswith("Re-issue failed")
+    assert after["report"] == before
+
+
+def test_only_a_finished_pqi_report_can_be_reissued(pqi):
+    sid = start(pqi, new_code(pqi)).json()["session_id"]             # still in progress
+    assert pqi.post(f"/api/admin/pqi/reissue/{sid}", headers=ADMIN).status_code == 409
 
 
 def test_voice_language_reaches_the_evaluator(pqi):

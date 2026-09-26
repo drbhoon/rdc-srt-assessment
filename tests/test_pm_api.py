@@ -304,6 +304,7 @@ def test_candidate_submission_to_admin_pdf(api):
         "status", "total_score", "normalized", "readiness", "questions_answered", "collected_count",
         "has_pdf", "error",
         "assessment_type", "pqi_headline",   # added with PQI (additive)
+        "progress",                          # live run progress for the console (additive, 2026-09-27)
     }
     if api.store == "postgres":
         expected_keys.add("processing_started_at")

@@ -20,6 +20,7 @@ from models import (
 )
 import assessment_types
 import pqi_service
+import pqi_scoring
 from assessment_types import PLANT_MANAGER, PQI
 from identity import resolve_employee, resolve_person, identity_configured
 from question_bank import load_questions, get_session_questions
@@ -219,6 +220,7 @@ async def get_config():
     """
     return {
         "assessment_minutes": ASSESSMENT_MINUTES,
+        "pqi_score_scale": pqi_scoring.CURRENT_SCALE,
         "engine_name": assessment_types.ENGINE_NAME,
         "assessment_order": assessment_types.ORDER,
         "assessments": assessment_types.presentation_map(),
@@ -537,6 +539,65 @@ async def rescore_session(
 
 
 # ─── API: Admin — Bulk rescore all stuck sessions (30/30 but not completed) ──
+# ─── API: Admin — re-issue PQI reports on the current score scale ──────────
+async def _reissue_guarded(session_id: str) -> None:
+    """Re-issue one PQI report in the shared pipeline queue (one AI call)."""
+    async with _get_pipeline_semaphore():
+        session = _get(session_id)
+        if session:
+            await pqi_service.reissue_report(session_id, session, client)
+
+
+def _begin_reissue(session_id: str) -> dict | None:
+    """Flip a finished PQI attempt to 'processing' for a re-issue. None if it is not one."""
+    session = _get(session_id)
+    if (not session or session.get("assessment_type") != PQI or session.get("status") != "completed"
+            or not session.get("report")):
+        return None
+    session.update(status="processing", error=None)
+    _cache[session_id] = session
+    update_session(session_id, status="processing", error=None, processing_started_at=_now_utc())
+    return session
+
+
+@app.post("/api/admin/pqi/reissue/{session_id}")
+async def reissue_pqi_report(session_id: str, background_tasks: BackgroundTasks,
+                             x_admin_token: str = Header(None), x_auth_email: str = Header(None)):
+    """Re-issue a finished PQI report on the current score scale, from its stored evaluations.
+
+    No SRT is evaluated again, so the levels, the second-review outcome and the
+    readiness decision stay exactly as recorded. The percentages, the narrative
+    (one AI call) and the PDF are produced afresh. If it fails, the old report
+    stays and the attempt returns to 'completed'.
+    """
+    if not _admin_identity(x_admin_token, x_auth_email):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if not _begin_reissue(session_id):
+        raise HTTPException(status_code=409, detail="Only a completed PQI attempt with a report can be re-issued.")
+    background_tasks.add_task(_reissue_guarded, session_id)
+    logger.info("Admin re-issue of PQI report %s on scale %s queued", session_id, pqi_scoring.CURRENT_SCALE)
+    return {"status": "reissuing", "session_id": session_id, "scale": pqi_scoring.CURRENT_SCALE}
+
+
+@app.post("/api/admin/pqi/reissue-all")
+async def reissue_all_pqi_reports(background_tasks: BackgroundTasks,
+                                  x_admin_token: str = Header(None), x_auth_email: str = Header(None)):
+    """Re-issue every completed PQI report that is not yet on the current scale."""
+    if not _admin_identity(x_admin_token, x_auth_email):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    queued = []
+    for s in list_sessions():
+        if s.get("assessment_type") != PQI or s.get("status") != "completed":
+            continue
+        if ((s.get("pqi_headline") or {}).get("scale")) == pqi_scoring.CURRENT_SCALE:
+            continue
+        if _begin_reissue(s["session_id"]):
+            background_tasks.add_task(_reissue_guarded, s["session_id"])
+            queued.append({"session_id": s["session_id"], "name": s.get("candidate_name")})
+    logger.info("Admin re-issue of %d PQI report(s) on scale %s queued", len(queued), pqi_scoring.CURRENT_SCALE)
+    return {"status": "reissuing", "scale": pqi_scoring.CURRENT_SCALE, "queued": queued}
+
+
 @app.post("/api/admin/rescore-stuck")
 async def rescore_stuck_sessions(
     background_tasks: BackgroundTasks,

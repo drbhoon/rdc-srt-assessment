@@ -232,3 +232,71 @@ def readiness(master, head, results: list, review_failures: list | None = None) 
         "manual_review_reasons":   manual_reasons,
         "provisional_note":        "Readiness bands are provisional until pilot calibration (Candidate_Output_Spec).",
     }
+
+
+# ─── Reported score scale ────────────────────────────────────────────────────
+# What a level is worth as a percentage in REPORTS. HR adopted scale C1 on
+# 2026-09-27 after the seven-candidate pilot: under level x 10 a level-6 answer
+# ("solid, sound, missing only the finishing touches") read as 60%, so the
+# strongest manager in the pilot scored 58-64 while HR rated him around 80.
+#
+# Only the reported percentages use this. The master's own rules — the second
+# review near a readiness boundary and the readiness bands themselves — keep
+# working on the master's native scale (headline() above, level x 10), so no
+# evaluation and no readiness decision changes with the scale. The bands are
+# to be recalibrated on the new scale once the next six pilot results are in.
+#
+# A new scale is a new entry here, never an edit to an existing one: every
+# report records the scale it was issued under, so old reports stay
+# explainable.
+SCORE_SCALES = {
+    "C1": {
+        "label": "Calibrated scale C1 (HR, 2026-09-27)",
+        "points": [0, 20, 35, 50, 60, 70, 80, 88, 94, 100],
+    },
+}
+CURRENT_SCALE = "C1"
+
+
+def scale_info(name: str = CURRENT_SCALE) -> dict:
+    scale = SCORE_SCALES[name]
+    return {"name": name, "label": scale["label"], "points": list(scale["points"]), "max": scale["points"][-1]}
+
+
+def level_percent(level, name: str = CURRENT_SCALE) -> float:
+    """A 0-9 SRT level as a percentage on the named scale."""
+    points = SCORE_SCALES[name]["points"]
+    return float(points[max(0, min(len(points) - 1, int(level or 0)))])
+
+
+def reported_headline(master, results: list, name: str = CURRENT_SCALE) -> dict:
+    """The numbers a report shows: each SRT level converted on the scale, then
+    averaged exactly as headline() averages levels — competency = mean of its
+    SRTs, overall = mean of the competencies, acumen = lens-weighted mean.
+
+    Competency scores are percentages here (0-100), not levels out of 10.
+    AFI is scored separately and is not affected by the scale.
+    """
+    by_code = {}
+    for r in results:
+        by_code.setdefault(r["primary_competency"], []).append(level_percent(r["final_score"], name))
+
+    competencies = []
+    for c in master["competencies"]:
+        values = by_code.get(c["code"], [])
+        competencies.append({"code": c["code"], "lens": c["lens"], "weight": c["weight"],
+                             "score": sum(values) / len(values) if values else 0.0})
+    overall = sum(c["score"] for c in competencies) / len(competencies) if competencies else 0.0
+
+    def acumen(lens):
+        chosen = [c for c in competencies if c["lens"] == lens]
+        total_weight = sum(c["weight"] for c in chosen)
+        return sum(c["score"] * c["weight"] for c in chosen) / total_weight if total_weight else 0.0
+
+    return {
+        "scale":            scale_info(name),
+        "competencies":     {c["code"]: c["score"] for c in competencies},
+        "overall":          overall,
+        "technical_acumen": acumen("Technical"),
+        "business_acumen":  acumen("Business"),
+    }

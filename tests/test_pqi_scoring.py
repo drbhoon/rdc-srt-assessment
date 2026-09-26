@@ -176,3 +176,40 @@ def test_review_plan_reasons_never_reveal_the_score_or_band(master):
     assert plan["srts"]["C2-0"].startswith("A possible contradiction")
     for reason in plan["srts"].values():
         assert "boundary" not in reason.lower() and "readiness" not in reason.lower() and "49" not in reason
+
+
+# ── Reported score scale (HR, 2026-09-27) ────────────────────────────────────
+def level_rows(levels: dict) -> list:
+    """Minimal SRT results: competency code -> the levels of its SRTs."""
+    return [{"srt_id": f"{code}-{i + 1:02d}", "primary_competency": code, "final_score": level,
+             "afi_activated": False, "afi_evidence_level": None}
+            for code, values in levels.items() for i, level in enumerate(values)]
+
+
+def test_scale_c1_is_what_hr_adopted():
+    assert sc.CURRENT_SCALE == "C1"
+    assert sc.SCORE_SCALES["C1"]["points"] == [0, 20, 35, 50, 60, 70, 80, 88, 94, 100]
+    points = sc.SCORE_SCALES["C1"]["points"]
+    assert all(a < b for a, b in zip(points, points[1:]))               # a better answer always earns more
+    assert [sc.level_percent(level) for level in (0, 6, 9)] == [0, 80, 100]
+
+
+def test_reported_headline_converts_levels_before_averaging(master):
+    # Every competency answered at level 6 on all three SRTs reads 80, not 60.
+    results = level_rows({c["code"]: [6, 6, 6] for c in master["competencies"]})
+    shown = sc.reported_headline(master, results)
+    assert shown["overall"] == pytest.approx(80.0)
+    assert shown["technical_acumen"] == pytest.approx(80.0) and shown["business_acumen"] == pytest.approx(80.0)
+    assert sc.headline(master, results)["overall"] == pytest.approx(60.0)          # native scale unchanged
+
+
+def test_reported_headline_reproduces_the_pilot(master):
+    # Haseeb Khan's calibrated levels from the pilot (report 177a28b6, 2026-09-26):
+    # 64.0 native, 81.6 on C1 — the figures HR reviewed.
+    levels = {"C1": [6, 4, 8], "C2": [7, 7, 2], "C3": [3, 6, 5], "C4": [8, 7, 4], "C5": [6, 8, 7],
+              "C6": [8, 6, 7], "C7": [6, 6, 8], "C8": [8, 5, 8], "C9": [8, 6, 6], "C10": [7, 7, 8]}
+    results = level_rows(levels)
+    assert round(sc.headline(master, results)["overall"], 1) == 64.0
+    shown = sc.reported_headline(master, results)
+    assert (round(shown["overall"], 1), round(shown["technical_acumen"], 1), round(shown["business_acumen"], 1)) == (
+        81.6, 86.5, 76.2)
