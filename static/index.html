@@ -165,7 +165,7 @@
         </div>
 
         <!-- Filled by the lookup. Shown so the candidate can see who the system
-             thinks they are BEFORE a 75-minute assessment is attributed to that
+             thinks they are BEFORE a timed assessment is attributed to that
              person — a mistyped code caught here costs nothing. -->
         <div class="alert alert-info" id="identityBox" style="display:none;"></div>
         <div class="code-err" id="identityErr"></div>
@@ -224,7 +224,7 @@
   // the role-free default: the candidate has not yet told us which assessment
   // they are here for, and the page must not guess.
   let PRESENTATION = null;
-  let minutes = '75';
+  let minutes = '90';
 
   function present(type) {
     if (!PRESENTATION) return null;
@@ -541,10 +541,10 @@
         sessionStorage.removeItem('rdc_answer_meta');
       }
 
-      // v4.18 cache-buster — prevents browser from serving a stale
-      // assessment.html (which would lock the candidate into the old
-      // hardcoded 60-min timer instead of the current 75-min default).
-      window.location.href = (window.BASE_PATH || '') + '/assessment?v=4.18';
+      // Cache-buster — prevents a browser serving a stale assessment.html.
+      // Bumped to 4.19 when the time limit moved from 75 to 90 minutes
+      // (2026-09-26), so nobody sits the paper on the old page.
+      window.location.href = (window.BASE_PATH || '') + '/assessment?v=4.19';
     } catch (err) {
       alert('Error starting session: ' + err.message);
       btn.disabled = false;

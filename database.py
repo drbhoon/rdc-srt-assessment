@@ -129,7 +129,7 @@ def init_db():
                 ("generation_seed", "BIGINT"),     # reproduces the 30-SRT form
                 ("generation_info", "JSONB"),
                 ("srt_snapshot",    "JSONB"),      # the 30 SRT records, frozen at start
-                ("deadline_at",     "TIMESTAMP"),  # UTC; start + 75 min, never extended
+                ("deadline_at",     "TIMESTAMP"),  # UTC; start + ASSESSMENT_MINUTES, never extended
                 ("last_saved_at",   "TIMESTAMP"),
                 ("answer_meta",     "JSONB"),      # {srt_id: {input, language}}
             ):

@@ -122,18 +122,28 @@ PRESENTATION = {
             {"num": "EN / हिं", "label": "Voice Languages"},
             {"num": "{minutes}", "label": "Minutes"},
         ],
+        # The briefing (HR, 2026-09-26). In the pilot the scores followed how
+        # much a candidate wrote and how many situations they reached, not
+        # only what they knew: short answers and blanks held capable people
+        # down. So the candidate is told HOW to answer — a structure, a length
+        # and a pace. Never what a good answer contains: no model answers,
+        # anchors or scoring guidance reach a candidate.
         "instructions": [
-            "You will be presented with <strong>30 real-world quality situations</strong> one at a time.",
-            "Read each situation carefully and respond as you would as the Plant Quality Incharge.",
+            "You will be presented with <strong>30 real-world quality situations</strong> one at a time. "
+            "Respond as you would as the Plant Quality Incharge.",
+            "<strong>Answer each situation in three short parts:</strong> (1) what you do first and what you "
+            "decide; (2) what you check, and why — the evidence you rely on; (3) how you stop it happening "
+            "again.",
+            "Aim for <strong>4 to 6 sentences</strong> per situation — about <strong>3 minutes</strong> each. "
+            "Be specific: name the test, the figure, the person responsible and the record you would keep.",
+            "<strong>Answer every situation.</strong> A short answer earns marks; a blank earns none. If you are "
+            "stuck, write your first action and move on — you can come back to it.",
             "You may <strong>type your response</strong> or use <strong>voice dictation</strong>. English, "
             "Hindi and Hinglish are all fine — for voice, choose English or Hindi speech recognition.",
-            "Be specific: state your decision, the evidence you rely on, who does what, and how you would "
-            "stop the problem recurring.",
             "Total time allowed: <strong>{minutes} minutes</strong>. A countdown timer is shown at the top.",
             "Your answers are saved as you go. If your connection drops, reopen this page and enter the same "
             "access code and details to continue where you left off — the timer keeps running from your "
             "original start.",
-            "Unanswered questions are scored as zero.",
             "After submission, HR will review your results and revert back to you with the outcome.",
         ],
         "voice_languages": True,

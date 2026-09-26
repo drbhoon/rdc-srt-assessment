@@ -102,17 +102,21 @@ def _page(filename: str) -> Response:
 # ─── Config ──────────────────────────────────────────────────────────────────
 ADMIN_PASSWORD     = os.environ.get("ADMIN_PASSWORD", "rdc@admin2024")
 EXCEL_PATH         = os.environ.get("EXCEL_PATH", str(Path(__file__).parent / "data" / "RDC_SRT_Master_100.xlsx"))
-ASSESSMENT_MINUTES = int(os.environ.get("ASSESSMENT_MINUTES", "75"))
+# 90 minutes for both assessments (HR, 2026-09-26). 75 was too tight for the
+# PQI pilot: one candidate left 13 of 30 situations blank and another 4, and
+# blanks score 0 however much the candidate knew. Plant Manager moves to 90 as
+# well, by the same decision — its scoring is untouched.
+ASSESSMENT_MINUTES = int(os.environ.get("ASSESSMENT_MINUTES", "90"))
 
 # v4.18: Boot-time visibility on the configured assessment duration. If
-# Railway has ASSESSMENT_MINUTES=60 set as an env var, code default of 75
-# is overridden silently — this log line surfaces the conflict so we can
+# Railway has ASSESSMENT_MINUTES set as an env var, the code default is
+# overridden silently — this log line surfaces the conflict so we can
 # verify what's actually live without guessing.
 _env_assessment = os.environ.get("ASSESSMENT_MINUTES")
 if _env_assessment is not None:
     print(
         f"[STARTUP] ASSESSMENT_MINUTES = {ASSESSMENT_MINUTES} "
-        f"(via Railway env var '{_env_assessment}'). To use code default 75, "
+        f"(via Railway env var '{_env_assessment}'). To use code default 90, "
         f"DELETE the ASSESSMENT_MINUTES env var on Railway."
     )
 else:

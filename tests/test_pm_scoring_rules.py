@@ -7,7 +7,9 @@ import scorer
 def test_pm_scoring_settings_are_unchanged():
     assert main.ENGLISH_WEIGHT == 0.15
     assert main.SCORE_CEILING == 9 and scorer.SCORE_CEILING == 9
-    assert main.ASSESSMENT_MINUTES == 75
+    # 75 -> 90 for Plant Manager and PQI alike, HR decision 2026-09-26. The
+    # only Plant Manager setting that moved; scoring settings below are unchanged.
+    assert main.ASSESSMENT_MINUTES == 90
     assert main.WATCHDOG_TIMEOUT_MINUTES == 15
     assert main._PIPELINE_MAX_CONCURRENT == 2
     assert main.READINESS_TIERS == [

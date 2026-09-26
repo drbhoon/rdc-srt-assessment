@@ -121,7 +121,7 @@ def test_start_freezes_a_balanced_form_and_never_sends_guidance(pqi):
     assert set(body) == {"session_id", "assessment_type", "questions", "total_questions", "answers", "answer_meta",
                          "remaining_seconds", "deadline_at", "status", "resumed"}
     assert (body["total_questions"], body["resumed"], body["answers"], body["status"]) == (30, False, {}, "in_progress")
-    assert 75 * 60 - 10 <= body["remaining_seconds"] <= 75 * 60
+    assert 90 * 60 - 10 <= body["remaining_seconds"] <= 90 * 60
     assert all(set(q) == {"question_number", "srt_id", "situation"} for q in body["questions"])
     assert used(pqi, code) == 1
 

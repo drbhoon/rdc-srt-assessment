@@ -404,7 +404,7 @@ const CIRC = 2 * Math.PI * 50;  // circumference for r=50
 (async () => {
   try {
     const cfg = await fetch('/api/config').then(r => r.json());
-    assessmentMinutes = cfg.assessment_minutes || 75;
+    assessmentMinutes = cfg.assessment_minutes || 90;
   } catch (_) {}
   totalTimerSeconds = assessmentMinutes * 60;
 

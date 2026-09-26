@@ -95,7 +95,7 @@ def test_health_and_config(api):
     # cannot read this falls back to the role-free default, so "default" being
     # present matters as much as the assessments themselves.
     cfg = api.get("/api/config").json()
-    assert cfg["assessment_minutes"] == 75
+    assert cfg["assessment_minutes"] == 90
     assert cfg["engine_name"] == assessment_types.ENGINE_NAME
     assert cfg["assessment_order"] == ["plant_manager", "pqi"]
     assert set(cfg["assessments"]) == {"default", "plant_manager", "pqi"}

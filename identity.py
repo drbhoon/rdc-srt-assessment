@@ -86,7 +86,7 @@ def resolve_employee(employee_code: str, email: str) -> dict:
     to ATTACH an unrecognised address to that employee — which is the right
     behaviour for an HR screen adding somebody's personal address, and quite
     wrong here: it would let a candidate type a colleague's employee code
-    beside their own e-mail and have a 75-minute assessment recorded against
+    beside their own e-mail and have a whole assessment recorded against
     the colleague.
 
     Requiring both to point at the same person means a mistyped code is caught
