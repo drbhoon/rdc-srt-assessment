@@ -14,6 +14,12 @@ Pipeline, following the master's AI_Evaluation_Sequence:
   then  headline scores, readiness and guardrails (pqi_scoring), the narrative,
         and the PDF
 
+Each attempt is scored under one rubric, recorded in its rubric_version:
+SRT_Scoring_Rubric_v1 (the master's own sheets; every attempt before October
+2026) or SRT_Scoring_Rubric_v2 (pqi_rubric_v2.py; new attempts, and any attempt
+given a full re-score). Under v2, readiness and the second review are decided on
+scale C1 with HR's pilot bands; under v1, on the native scale as before.
+
 Evaluations persist as they complete, so Rescore resumes from where a run
 stopped. Every evaluation — first pass, review, error — is also appended to
 srt_evaluations as an audit trail that is never rewritten.
@@ -21,6 +27,8 @@ srt_evaluations as an audit trail that is never rewritten.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import os
 import uuid
@@ -50,6 +58,14 @@ SUBMIT_GRACE_SECONDS = 300
 EXPIRED_SUBMIT_AFTER_MINUTES = int(os.environ.get("PQI_EXPIRED_SUBMIT_AFTER_MINUTES", "10"))
 MAX_ANSWER_CHARS = 20000
 NOT_ANSWERED = "Question not answered — counted as zero."
+
+# The rubric new attempts — and full re-scores — are scored under. v1 stays
+# available (set PQI_SCORING_RUBRIC=SRT_Scoring_Rubric_v1), and an attempt is
+# always resumed under the rubric it started with.
+CURRENT_RUBRIC = evaluator.normalise_rubric(os.environ.get("PQI_SCORING_RUBRIC", evaluator.RUBRIC_V2))
+# Recorded on every report. PILOT_CALIBRATION: the engine is being validated
+# against expert ratings, so every attempt keeps what is needed to re-score it.
+EVALUATION_MODE = os.environ.get("PQI_EVALUATION_MODE", "PILOT_CALIBRATION").strip() or "PILOT_CALIBRATION"
 
 
 class PqiUnavailable(Exception):
@@ -129,7 +145,9 @@ def master_status() -> dict:
         "effective_date": master["effective_date"], "srts": len(master["srts"]),
         "competencies": len(master["competencies"]), "has_critical_failure_type": master["has_failure_type"],
         "warnings": master["warnings"], "evaluator_model": evaluator.PQI_EVALUATOR_MODEL,
-        "report_model": evaluator.PQI_REPORT_MODEL, "prompt_version": prompt_version_for(master),
+        "report_model": evaluator.PQI_REPORT_MODEL, "prompt_version": prompt_version_for(master, CURRENT_RUBRIC),
+        "scoring_rubric": CURRENT_RUBRIC, "evaluation_mode": EVALUATION_MODE,
+        "score_scale": scoring.CURRENT_SCALE,
     }
 
 
@@ -150,10 +168,54 @@ def master_for_session(session) -> dict:
     return _masters_by_sha[sha]
 
 
-def prompt_version_for(master) -> str:
-    if master["sha256"] not in _prompt_versions:
-        _prompt_versions[master["sha256"]] = evaluator.prompt_version(master)
-    return _prompt_versions[master["sha256"]]
+def prompt_version_for(master, rubric: str = evaluator.RUBRIC_V1) -> str:
+    key = (master["sha256"], evaluator.normalise_rubric(rubric))
+    if key not in _prompt_versions:
+        _prompt_versions[key] = evaluator.prompt_version(master, key[1])
+    return _prompt_versions[key]
+
+
+def session_rubric(session) -> str:
+    return evaluator.normalise_rubric(session.get("rubric_version"))
+
+
+def history_entry(session) -> dict | None:
+    """What a full re-score is about to replace, kept for the validation table."""
+    report = session.get("report") or {}
+    if not report:
+        return None
+    return {
+        "generated_at":      report.get("generated_at"),
+        "scoring_rubric":    report.get("scoring_rubric") or session_rubric(session),
+        "score_scale":       (report.get("score_scale") or {}).get("name", "native (level x 10)"),
+        "prompt_version":    report.get("prompt_version"),
+        "evaluator_model":   report.get("evaluator_model"),
+        "overall":           report.get("overall_pqi_score"),
+        "technical":         report.get("technical_acumen"),
+        "business":          report.get("business_acumen"),
+        "afi":               report.get("anti_firefighting_index"),
+        "readiness":         report.get("overall_readiness"),
+        "critical_flags":    len(report.get("critical_flags") or []),
+        "srt_levels":        {r["srt_id"]: r.get("final_score") for r in report.get("srt_results") or []},
+    }
+
+
+def full_rescore_fields(session) -> dict:
+    """Fields a FULL re-score of a PQI attempt sets, beside wiping its scores.
+
+    A full re-score runs under the current rubric (that is what it is for), and
+    the report it replaces is appended to report_history first.
+    """
+    try:
+        master = master_for_session(session)
+        version = prompt_version_for(master, CURRENT_RUBRIC)
+    except PqiUnavailable:
+        version = session.get("prompt_version")
+    history = list(session.get("report_history") or [])
+    entry = history_entry(session)
+    if entry:
+        history.append(entry)
+    return {"rubric_version": CURRENT_RUBRIC, "prompt_version": version, "report_history": history}
 
 
 # ── Attempts ─────────────────────────────────────────────────────────────────
@@ -173,9 +235,9 @@ def create_attempt(details: dict, assessment_minutes: int):
     session_id = str(uuid.uuid4())
     pqi = {
         "master_version":  master["version"],
-        "rubric_version":  master["rubric_version"],
+        "rubric_version":  CURRENT_RUBRIC,
         "master_sha256":   master["sha256"],
-        "prompt_version":  prompt_version_for(master),
+        "prompt_version":  prompt_version_for(master, CURRENT_RUBRIC),
         "evaluator_model": evaluator.PQI_EVALUATOR_MODEL,
         "generation_seed": form["seed"],
         "generation_info": {k: form[k] for k in ("attempts", "afi_yes", "within_target", "decision_items")},
@@ -317,6 +379,35 @@ def _earlier(result) -> dict:
     }
 
 
+def _earlier_v2(result) -> dict:
+    claim = result.get("critical_failure_claim") or {}
+    return {
+        "Raw_Level": result["raw_level"], "Decision_Made": result["decision_made"],
+        "Essential_Judgment_Demonstrated": result.get("essential_judgment"),
+        "Key_Evidence": result.get("key_evidence"), "Material_Gap": result.get("material_gap"),
+        "Low_Score_Basis": result.get("low_score_basis"),
+        "Serious_Negative": "Yes" if result.get("serious_negative") else "No",
+        "Critical_Failure": "Yes" if (result["critical_failure"] or result.get("critical_failure_unverified")) else "No",
+        "Critical_Failure_Statement": result.get("critical_failure_statement") or claim.get("statement", ""),
+        "Critical_Failure_Reason": result.get("critical_failure_reason") or claim.get("reason", ""),
+        "Unresolved_Contradiction": result.get("unresolved_contradiction"),
+        "AFI_Activated": "Yes" if result["afi_activated"] else "No",
+        "AFI_Evidence_Level": result["afi_evidence_level"], "AFI_Evidence": result.get("afi_evidence"),
+        "Evaluation_Confidence": result.get("evaluation_confidence"),
+    }
+
+
+def _apply(master, srt, observed, text, rubric):
+    if rubric == evaluator.RUBRIC_V2:
+        return scoring.apply_rules_v2(master, srt, observed, text)
+    return scoring.apply_rules(master, srt, observed)
+
+
+def _decided(master, rubric, ordered, head):
+    """v2 decides on scale C1 with the pilot bands; v1 keeps exactly its old path."""
+    return scoring.basis(master, rubric, ordered, head) if rubric == evaluator.RUBRIC_V2 else None
+
+
 async def run_pipeline(session_id: str, session: dict, client) -> None:
     try:
         await _run(session_id, session, client)
@@ -336,14 +427,18 @@ async def _run(session_id: str, session: dict, client) -> None:
     by_id = {s["srt_id"]: s for s in snapshot}
     answers = session.get("collected_answers") or {}
     metas = session.get("answer_meta") or {}
+    rubric = session_rubric(session)
+    # Kept scores are reused only if they were made under this attempt's rubric.
     results = {k: v for k, v in (session.get("scores") or {}).items()
-               if k in by_id and (v or {}).get("status") in ("scored", "blank")}
+               if k in by_id and (v or {}).get("status") in ("scored", "blank")
+               and evaluator.normalise_rubric((v or {}).get("rubric")) == rubric}
+    usage = evaluator.track_usage()
 
-    version = prompt_version_for(master)
+    version = prompt_version_for(master, rubric)
     session["prompt_version"], session["evaluator_model"] = version, evaluator.PQI_EVALUATOR_MODEL
     database.update_session(session_id, prompt_version=version, evaluator_model=evaluator.PQI_EVALUATOR_MODEL)
     common = {"session_id": session_id, "assessment_type": PQI, "master_version": master["version"],
-              "rubric_version": master["rubric_version"], "prompt_version": version}
+              "rubric_version": rubric, "prompt_version": version}
 
     def log(srt, pass_name, status, text, meta, raw, result):
         try:
@@ -369,15 +464,16 @@ async def _run(session_id: str, session: dict, client) -> None:
         raw = None
         async with semaphore:
             if not text:
-                result = scoring.blank_result(master, srt)
+                result = scoring.blank_result(master, srt, rubric)
             else:
                 try:
-                    raw, observed = await asyncio.to_thread(evaluator.evaluate_srt, client, master, srt, text, meta)
+                    raw, observed = await asyncio.to_thread(evaluator.evaluate_srt, client, master, srt, text, meta,
+                                                            None, rubric)
                 except evaluator.EvaluatorError as exc:
                     errors[srt_id] = str(exc)
                     log(srt, "first", "error", text, meta, None, {"error": str(exc)})
                     return
-                result = scoring.apply_rules(master, srt, observed)
+                result = _apply(master, srt, observed, text, rubric)
         result.update(_compat(result, srt), **{"pass": "first", "reviewed": False})
         results[srt_id] = result
         _heartbeat(session_id, session, len(results))
@@ -400,14 +496,16 @@ async def _run(session_id: str, session: dict, client) -> None:
     consistency = {"status": "skipped", "contradictions": []}
     if len(answered) >= 2:
         try:
-            _, contradictions = await asyncio.to_thread(evaluator.consistency_check, client, master, answered)
+            _, contradictions = await asyncio.to_thread(evaluator.consistency_check, client, master, answered,
+                                                        rubric)
             consistency = {"status": "done", "contradictions": contradictions}
         except evaluator.EvaluatorError as exc:
             consistency = {"status": "error", "error": str(exc), "contradictions": []}
 
     # ── Step 12: second review ───────────────────────────────────────────────
     head = scoring.headline(master, ordered)
-    plan = scoring.review_plan(master, head, ordered, consistency["contradictions"])
+    plan = scoring.review_plan(master, head, ordered, consistency["contradictions"],
+                               _decided(master, rubric, ordered, head))
     review_failures, changes = [], []
 
     async def second_review(srt_id, reason):
@@ -418,18 +516,23 @@ async def _run(session_id: str, session: dict, client) -> None:
             try:
                 raw, observed = await asyncio.to_thread(
                     evaluator.evaluate_srt, client, master, srt, text, meta,
-                    {"reason": reason, "earlier": _earlier(earlier)},
+                    {"reason": reason,
+                     "earlier": _earlier_v2(earlier) if rubric == evaluator.RUBRIC_V2 else _earlier(earlier)},
+                    rubric,
                 )
             except evaluator.EvaluatorError as exc:
                 review_failures.append(srt_id)
                 earlier["review_error"] = str(exc)
                 log(srt, "review", "error", text, meta, None, {"error": str(exc)})
                 return
-        reviewed = scoring.apply_rules(master, srt, observed)
+        reviewed = _apply(master, srt, observed, text, rubric)
+        kept = (("final_score", "raw_level", "decision_made", "critical_failure", "critical_failure_unverified",
+                 "afi_evidence_level", "evaluation_confidence") if rubric == evaluator.RUBRIC_V2 else
+                ("final_score", "core_response_level", "excellence_lift", "decision_made", "critical_failure",
+                 "afi_evidence_level"))
         reviewed.update(_compat(reviewed, srt), **{
             "pass": "review", "reviewed": True, "review_reason": reason,
-            "first_pass": {k: earlier[k] for k in ("final_score", "core_response_level", "excellence_lift",
-                                                    "decision_made", "critical_failure", "afi_evidence_level")},
+            "first_pass": {k: earlier.get(k) for k in kept},
         })
         results[srt_id] = reviewed
         _heartbeat(session_id, session)
@@ -447,19 +550,21 @@ async def _run(session_id: str, session: dict, client) -> None:
     session["scores"] = {s["srt_id"]: results[s["srt_id"]] for s in snapshot}
     database.update_session(session_id, scores=session["scores"])
     head = scoring.headline(master, ordered)
-    ready = scoring.readiness(master, head, ordered, review_failures)
+    decided = _decided(master, rubric, ordered, head)
+    ready = scoring.readiness(master, head, ordered, review_failures, decided)
 
     # ── Narrative ────────────────────────────────────────────────────────────
     _heartbeat(session_id, session)
     report = build_report(master, session, snapshot, ordered, head, ready, plan, changes, review_failures,
-                          consistency, answers, metas)
+                          consistency, answers, metas, rubric)
     try:
         _, narrative = await asyncio.to_thread(evaluator.write_report, client, master, narrative_input(report),
-                                               list(by_id))
+                                               list(by_id), rubric)
     except evaluator.EvaluatorError as exc:
         _fail(session_id, session, f"Report narrative failed: {exc}. Click Rescore — evaluations are kept.")
         return
     report.update(narrative)
+    report["usage"] = evaluator.usage_summary(usage)
     session["report"] = report
     database.update_session(session_id, report=report)
 
@@ -474,8 +579,9 @@ async def _run(session_id: str, session: dict, client) -> None:
 
     session["status"] = "completed"
     database.update_session(session_id, status="completed", processing_started_at=None)
-    logger.info("PQI attempt %s completed: overall %.1f on scale %s (%.1f native), readiness %s", session_id,
-                report["overall_pqi_score"], report["score_scale"]["name"], head["overall"], ready["band"])
+    logger.info("PQI attempt %s completed under %s: overall %.1f on scale %s (%.1f native), readiness %s, "
+                "est. cost $%s", session_id, rubric, report["overall_pqi_score"], report["score_scale"]["name"],
+                head["overall"], ready["band"], (report.get("usage") or {}).get("estimated_cost_usd"))
 
 
 async def reissue_report(session_id: str, session: dict, client) -> None:
@@ -510,23 +616,26 @@ async def reissue_report(session_id: str, session: dict, client) -> None:
         return
 
     ordered = [scores[s["srt_id"]] for s in snapshot]
+    rubric = session_rubric(session)
+    usage = evaluator.track_usage()
     review = previous.get("second_review") or {}
     failures = review.get("failures") or []
     plan = {"triggers": review.get("triggers") or [], "srts": {}}
     consistency = previous.get("consistency_check") or {"status": "skipped", "contradictions": []}
     head = scoring.headline(master, ordered)
-    ready = scoring.readiness(master, head, ordered, failures)
+    ready = scoring.readiness(master, head, ordered, failures, _decided(master, rubric, ordered, head))
     answers = session.get("collected_answers") or {}
     report = build_report(master, session, snapshot, ordered, head, ready, plan, review.get("changes") or [],
-                          failures, consistency, answers, session.get("answer_meta") or {})
+                          failures, consistency, answers, session.get("answer_meta") or {}, rubric)
     _heartbeat(session_id, session)
     try:
         _, narrative = await asyncio.to_thread(evaluator.write_report, client, master, narrative_input(report),
-                                               [s["srt_id"] for s in snapshot])
+                                               [s["srt_id"] for s in snapshot], rubric)
     except evaluator.EvaluatorError as exc:
         give_up(f"report narrative: {exc}")
         return
     report.update(narrative)
+    report["usage"] = evaluator.usage_summary(usage)
     report["reissued_from"] = {"generated_at": previous.get("generated_at"),
                                "score_scale": (previous.get("score_scale") or {}).get("name", "native (level x 10)")}
     try:
@@ -546,8 +655,22 @@ def _r1(value):
     return None if value is None else round(value, 1)
 
 
+def config_hash(master, rubric, prompt_version) -> str:
+    """One fingerprint of everything that decides a result: rubric, prompt,
+    models, scale, bands, caps, mode and master. Equal hashes, comparable runs."""
+    decided = scoring.basis(master, rubric, [])
+    material = {
+        "rubric": rubric, "prompt_version": prompt_version, "evaluator_model": evaluator.PQI_EVALUATOR_MODEL,
+        "report_model": evaluator.PQI_REPORT_MODEL, "scale": scoring.scale_info(), "bands": decided["bands"],
+        "decision_cap": master["decision_cap"], "critical_failure_cap": master["critical_failure_cap"],
+        "second_review_proximity": master["second_review_proximity"], "mode": EVALUATION_MODE,
+        "master_sha256": master["sha256"],
+    }
+    return hashlib.sha256(json.dumps(material, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:12]
+
+
 def build_report(master, session, snapshot, ordered, head, ready, plan, changes, review_failures,
-                 consistency, answers, metas) -> dict:
+                 consistency, answers, metas, rubric: str = evaluator.RUBRIC_V1) -> dict:
     names = {c["code"]: c["name"] for c in master["competencies"]}
     results = {r["srt_id"]: r for r in ordered}
     flags = [{
@@ -556,6 +679,7 @@ def build_report(master, session, snapshot, ordered, head, ready, plan, changes,
         "severity": results[s["srt_id"]]["critical_failure_severity"],
         "type": results[s["srt_id"]]["critical_failure_type"],
         "reason": results[s["srt_id"]]["critical_failure_reason"],
+        "statement": results[s["srt_id"]].get("critical_failure_statement", ""),
     } for s in snapshot if results[s["srt_id"]]["critical_failure"]]
     # Printed numbers are on the reported scale; the native (level x 10)
     # figures are kept beside them, because readiness and the second review
@@ -579,10 +703,20 @@ def build_report(master, session, snapshot, ordered, head, ready, plan, changes,
         "business": _r1(reported["business_acumen"]), "afi": _r1(head["afi"]), "readiness": ready["band"],
         "manual_review": ready["manual_review_required"], "critical_flags": len(flags),
         "scale": reported["scale"]["name"], "native_overall": _r1(head["overall"]),
+        "rubric": rubric,
     }
+    done = scoring.completion(master, ordered)
+    headline.update(completion_percent=done["completion_percent"], blank_count=done["blank_count"])
+    v2_rules = rubric == evaluator.RUBRIC_V2
     return {
         "assessment_type":         PQI,
         "report_version":          2,
+        "scoring_rubric":          rubric,
+        "evaluation_mode":         EVALUATION_MODE,
+        "calibration":             reported["scale"]["name"],
+        "config_hash":             config_hash(master, rubric, session.get("prompt_version")),
+        "question_ids":            [s["srt_id"] for s in snapshot],
+        "completion":              done,
         "master": {k: master[k] for k in ("file_name", "sha256", "version", "rubric_version", "status", "effective_date")},
         "prompt_version":          session.get("prompt_version"),
         "evaluator_model":         evaluator.PQI_EVALUATOR_MODEL,
@@ -596,7 +730,9 @@ def build_report(master, session, snapshot, ordered, head, ready, plan, changes,
         "native_scores": {
             "overall": _r1(head["overall"]), "technical": _r1(head["technical_acumen"]),
             "business": _r1(head["business_acumen"]), "attainable_max": master["overall_max"],
-            "note": "Level x 10, the master's own scale. Readiness and the second review are decided on these.",
+            "note": ("Level x 10, the master's own scale. Under Rubric v2, readiness and the second review are "
+                     "decided on the scale C1 figures above." if v2_rules else
+                     "Level x 10, the master's own scale. Readiness and the second review are decided on these."),
         },
         "anti_firefighting_index": _r1(head["afi"]),
         "afi_band":                head["afi_band"],
@@ -630,6 +766,9 @@ def narrative_input(report: dict) -> dict:
         "AFI_Interpretation": report["afi_band"],
         "Readiness": report["overall_readiness"],
         "Readiness_Guardrails": report["readiness"]["caps"],
+        "Scoring_Rubric": report.get("scoring_rubric") or evaluator.RUBRIC_V1,
+        "Completion": {k: (report.get("completion") or {}).get(k) for k in
+                       ("questions_presented", "questions_answered", "blank_count", "completion_percent")},
         "Score_Scale": (f"Overall, acumen and competency scores are percentages on {report['score_scale']['label']}, "
                         "which converts each SRT level (0-9) to a percentage and then averages. Final_SRT_Score below "
                         "is still the SRT level on the 0-9 scale. Quote each on its own scale."),
@@ -643,5 +782,6 @@ def narrative_input(report: dict) -> dict:
             "Final_SRT_Score": r["final_score"], "Decision_Made": r["decision_made"],
             "AFI_Evidence_Level": r["afi_evidence_level"], "Score_Justification": r["score_justification"],
             "Primary_Gap": r["primary_gap"],
+            **({"Essential_Judgment_Demonstrated": r.get("essential_judgment")} if r.get("rubric") else {}),
         } for r in report["srt_results"]],
     }

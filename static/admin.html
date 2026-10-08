@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Admin Panel – RDC SRT Assessment</title>
-  <!-- v4.24 — list refreshes itself while anything runs; live PQI progress; Rescore locked during a run; PQI reports on scale C1 with re-issue. v4.23 — one engine name; tabs, columns and pickers render from the assessment registry; skill v2.5: 9-cap, double-pass extreme-total review, per-competency recognition, top tier gated >250, integrity override, re-baseline batch -->
+  <!-- v4.25 — PQI Rubric v2: rubric shown per report and row, "Re-score all on Rubric v2", validation table download, v2 SRT detail. v4.24 — list refreshes itself while anything runs; live PQI progress; Rescore locked during a run; PQI reports on scale C1 with re-issue. v4.23 — one engine name; tabs, columns and pickers render from the assessment registry; skill v2.5: 9-cap, double-pass extreme-total review, per-competency recognition, top tier gated >250, integrity override, re-baseline batch -->
   <link rel="stylesheet" href="/static/style.css?v=4.23"/>
   <style>
     body { background: #f0f3f8; }
@@ -304,7 +304,7 @@
       <div>
         <h1>
           <span id="dashTitle">RDC – Situation Based Competency Assessment Engine (RDC-KYS)</span>
-          <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.24</span>
+          <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.25</span>
         </h1>
         <div class="sub">Admin Panel | Confidential – Head Office Use Only</div>
       </div>
@@ -332,6 +332,8 @@
     <button class="btn btn-primary btn-sm" onclick="openQuickTest()" title="Run a full pipeline test without answering 30 questions">🧪 Quick Test</button>
     <button class="btn-rescore-bulk" onclick="rescoreAllStuck()" title="Rescue every session that has all 30 answers but is stuck 'In Progress'. Uses stored transcripts — no candidate involvement. Processes 2 at a time.">🚑 Rescore All Stuck</button>
     <button class="btn-rescore-bulk" id="reissueAllBtn" style="background:#16a085;display:none;" onclick="reissueAllPqi()" title="Re-issue every completed PQI report that is not yet on the current score scale. Uses the stored evaluations — nothing is re-evaluated; one AI call per report for the narrative.">↻ Re-issue all on new scale</button>
+    <button class="btn-rescore-bulk pqi-only" id="pqiRescoreAllBtn" style="background:#c0392b;display:none;" onclick="rescoreAllPqi()" title="Full re-score of every PQI attempt under the current scoring rubric, with the same prompt and model for all. Each attempt keeps the result it replaces for the validation table. About 35-60 AI calls per candidate.">⟳ Re-score all on current rubric</button>
+    <button class="btn btn-outline btn-sm pqi-only" id="pqiValidationBtn" style="display:none;" onclick="downloadPqiValidation()" title="Excel: previous vs revised score, technical, business, AFI, readiness, blanks; competency scores, all 30 SRT levels, level counts, Critical Failures and second-review changes. No AI calls.">⬇️ Validation table</button>
     <button class="btn-rescore-bulk" style="background:#8e44ad;" onclick="rescoreValidationBatch()" title="RE-BASELINE: force-full rescore ALL completed sessions under the current skill (v2.5). Wipes prior scores so every question is re-scored fresh. ~30 calls/candidate — slow and uses API quota. Use after a skill calibration change.">⟳⟳ Re-baseline All</button>
   </div>
 
@@ -574,6 +576,7 @@ function setAssessment(type) {
   document.getElementById('st-avg-label').textContent =
     present(activeAssessment).avg_label || 'Avg Score';
   document.getElementById('reissueAllBtn').style.display = reportStyle(activeAssessment) === 'pqi' ? '' : 'none';
+  document.querySelectorAll('.pqi-only').forEach(b => { b.style.display = reportStyle(activeAssessment) === 'pqi' ? '' : 'none'; });
   renderPqiBanner();
   updateStats();
   renderTable();
@@ -597,6 +600,9 @@ function renderPqiBanner() {
   el.innerHTML = '';
   if (activeAssessment !== 'pqi' || !pqiMasterStatus) return;
   const m = pqiMasterStatus;
+  if (m.scoring_rubric) {
+    document.getElementById('pqiRescoreAllBtn').textContent = '⟳ Re-score all on ' + rubricShort(m.scoring_rubric);
+  }
   if (!m.available) {
     el.className = 'pqi-banner err';
     el.innerHTML = '<strong>PQI is unavailable</strong> — the master workbook failed validation, so PQI codes '
@@ -604,7 +610,9 @@ function renderPqiBanner() {
     return;
   }
   el.className = 'pqi-banner warn';
-  el.innerHTML = `Master <strong>${escHtml(m.version)}</strong> (${escHtml(m.status)}) · ${escHtml(m.rubric_version)}`
+  el.innerHTML = `Master <strong>${escHtml(m.version)}</strong> (${escHtml(m.status)})`
+    + ` · scoring <strong>${escHtml(m.scoring_rubric || m.rubric_version)}</strong>`
+    + (m.evaluation_mode ? ` (${escHtml(m.evaluation_mode)})` : '')
     + ` · ${m.srts} SRTs · evaluator ${escHtml(m.evaluator_model)}`
     + ((m.warnings || []).length ? '<br><small>⚠ ' + m.warnings.map(escHtml).join('<br>⚠ ') + '</small>' : '');
 }
@@ -861,6 +869,9 @@ function readinessClass(text) {
 
 function fmt1(v) { return typeof v === 'number' ? v.toFixed(1) : '—'; }
 
+// "SRT_Scoring_Rubric_v2" → "Rubric v2". Reports from before v2 carry no rubric: they are v1.
+function rubricShort(r) { return 'Rubric ' + (String(r || '').match(/v\d+$/) || ['v1'])[0]; }
+
 function pqiScoreCells(s, readyCls) {
   const h = s.pqi_headline || {};
   const review = h.manual_review ? '<span class="badge-review" title="Manual review required — see the report">Review</span>' : '';
@@ -869,7 +880,7 @@ function pqiScoreCells(s, readyCls) {
         <td>${fmt1(h.technical)}</td>
         <td>${fmt1(h.business)}</td>
         <td>${fmt1(h.afi)}</td>
-        <td class="${readyCls}">${escHtml(s.readiness || '—')}${review}${flags}</td>`;
+        <td class="${readyCls}">${escHtml(s.readiness || '—')}${review}${flags}${s.status === 'completed' ? ` <span style="color:#999;font-size:10px;" title="Scoring rubric of this report">${escHtml(rubricShort(h.rubric))}</span>` : ''}</td>`;
 }
 
 function escHtml(str) {
@@ -1033,17 +1044,23 @@ function showPqiReport(sid, cand, r) {
       <div class="body">
         <p><strong>Situation:</strong> ${e(s.situation)}</p>
         <p><strong>Response${s.response_capture ? ' (' + e(s.response_capture) + ')' : ''}:</strong> ${s.response ? e(s.response) : '<em>(no response)</em>'}</p>
-        <p>Core ${s.core_response_level} · Lift ${s.excellence_lift} · Decision made: ${e(s.decision_made)}${(s.caps_applied || []).length ? ' · cap applied: ' + e(s.caps_applied.join(', ')) : ''} · AFI ${s.afi_activated ? s.afi_evidence_level + '/5' : 'not scored'} (${e(s.afi_applicability)})</p>
-        ${s.critical_failure ? `<p><strong>Critical Failure</strong> (${e(s.critical_failure_severity)} / ${e(s.critical_failure_type)}): ${e(s.critical_failure_reason)}</p>` : ''}
-        <p><strong>Justification:</strong> ${e((s.score_justification || []).join(' '))}</p>
-        <p><strong>Primary gap:</strong> ${e(s.primary_gap || '')}</p>
+        ${s.rubric
+          ? `<p>Level ${s.raw_level} · Essential judgment: ${e(s.essential_judgment || '')} · Decision made: ${e(s.decision_made)}${(s.caps_applied || []).length ? ' · cap applied: ' + e(s.caps_applied.join(', ')) : ''} · AFI ${s.afi_activated ? s.afi_evidence_level + '/5' : 'not scored'} (${e(s.afi_applicability)}) · Confidence: ${e(s.evaluation_confidence || '')}${s.serious_negative ? ' · serious negative' : ''}</p>`
+          : `<p>Core ${s.core_response_level} · Lift ${s.excellence_lift} · Decision made: ${e(s.decision_made)}${(s.caps_applied || []).length ? ' · cap applied: ' + e(s.caps_applied.join(', ')) : ''} · AFI ${s.afi_activated ? s.afi_evidence_level + '/5' : 'not scored'} (${e(s.afi_applicability)})</p>`}
+        ${s.critical_failure ? `<p><strong>Critical Failure</strong> (${e(s.critical_failure_severity)} / ${e(s.critical_failure_type)}): ${e(s.critical_failure_reason)}${s.critical_failure_statement ? `<br><em>Candidate's words: “${e(s.critical_failure_statement)}”</em>` : ''}</p>` : ''}
+        ${s.critical_failure_unverified ? `<p><strong>Possible Critical Failure not confirmed</strong> — the evaluator quoted “${e((s.critical_failure_claim || {}).statement || '')}”, which is not in the response, so no cap was applied.</p>` : ''}
+        ${s.rubric && s.low_score_basis && !String(s.low_score_basis).startsWith('Not applicable') ? `<p><strong>Low-score basis:</strong> ${e(s.low_score_basis)}</p>` : ''}
+        <p><strong>${s.rubric ? 'Key evidence' : 'Justification'}:</strong> ${e((s.score_justification || []).join(' '))}</p>
+        <p><strong>${s.rubric ? 'Material gap' : 'Primary gap'}:</strong> ${e(s.primary_gap || '')}</p>
+        ${s.rubric && s.afi_evidence ? `<p><strong>AFI evidence:</strong> ${e(s.afi_evidence)}</p>` : ''}
         ${s.first_pass && s.first_pass.final_score !== s.final_score ? `<p><em>Second review changed the score from ${s.first_pass.final_score}.</em></p>` : ''}
       </div>
     </details>`).join('');
 
   document.getElementById('pqiReportBody').innerHTML = `
     <div class="modal-title">PQI Report: ${e(cand.candidate_name)}</div>
-    <div class="modal-sub">${e(cand.plant_location)} | ${e(cand.assessment_date)} | Master ${e(m.version)} (${e(m.status)}) · ${e(m.rubric_version)} · ${e(r.evaluator_model || '')} | Confidential</div>
+    <div class="modal-sub">${e(cand.plant_location)} | ${e(cand.assessment_date)} | Master ${e(m.version)} (${e(m.status)}) · ${e(r.scoring_rubric || m.rubric_version)} · ${e(r.evaluator_model || '')}${r.usage ? ` · AI cost ≈ $${e(r.usage.estimated_cost_usd)}` : ''} | Confidential</div>
+    ${r.completion ? `<div class="modal-sub">Answered ${r.completion.questions_answered} of ${r.completion.questions_presented} (${r.completion.completion_percent}%)${r.completion.blank_count ? ` · ${r.completion.blank_count} unanswered, counted as 0 · answered-question performance ${fmt1(r.completion.answered_only_overall)} (diagnostic only)` : ''}</div>` : ''}
     <div class="score-hero-sm">
       ${box(fmt1(r.overall_pqi_score), `Overall PQI /100 (max ${r.overall_attainable_max || 90})`)}
       ${box(fmt1(r.technical_acumen), 'Technical Acumen')}
@@ -1179,6 +1196,36 @@ async function reissuePqi(sid, name) {
     if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
     await loadSessions();
   } catch (e) { alert('Re-issue failed: ' + e.message); }
+}
+
+async function rescoreAllPqi() {
+  const rubric = rubricShort((pqiMasterStatus || {}).scoring_rubric);
+  if (!confirm(`Re-score every PQI attempt on ${rubric}?\n\n` +
+               'Every stored answer is evaluated again with the same prompt and model, so all results are comparable. ' +
+               'Attempts already completed on this rubric are skipped. Each attempt keeps the result it replaces for the validation table.\n\n' +
+               'About 35-60 AI calls (roughly $1-2.50) per candidate; two run at a time and the list updates itself.')) return;
+  try {
+    const res = await fetch('/api/admin/pqi/rescore-all', { method: 'POST', headers: { 'X-Admin-Token': adminToken } });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
+    const d = await res.json();
+    alert(d.queued.length ? `Re-scoring ${d.queued.length} attempt(s) on ${rubricShort(d.rubric)}.`
+                          : `Nothing to re-score: every finished PQI attempt is already on ${rubricShort(d.rubric)}.`);
+    await loadSessions();
+  } catch (e) { alert('Re-score failed: ' + e.message); }
+}
+
+async function downloadPqiValidation() {
+  try {
+    const res = await fetch('/api/admin/pqi/validation.xlsx', { headers: { 'X-Admin-Token': adminToken } });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
+    const blob = await res.blob();
+    const name = (res.headers.get('content-disposition') || '').match(/filename="([^"]+)"/);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name ? name[1] : 'PQI_Validation.xlsx';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) { alert('Validation table failed: ' + e.message); }
 }
 
 async function reissueAllPqi() {

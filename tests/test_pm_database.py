@@ -117,6 +117,7 @@ def test_rows_written_before_the_migrations_still_read_correctly(pg):
         "master_sha256": None, "prompt_version": None, "evaluator_model": None, "generation_seed": None,
         "generation_info": None, "srt_snapshot": None, "deadline_at": None, "last_saved_at": None,
         "answer_meta": None,
+        "report_history": None,   # added with PQI Rubric v2 (additive)
     }
     assert database.list_sessions() == [{
         "session_id": "legacy-1", "candidate_name": "Old Candidate", "plant_location": "Old Plant",
@@ -125,6 +126,7 @@ def test_rows_written_before_the_migrations_still_read_correctly(pg):
         "questions_answered": 1, "collected_count": 1, "has_pdf": True, "error": None,
         "created_at": "2026-03-01T10:00:00Z", "processing_started_at": None,
         "assessment_type": "plant_manager", "pqi_headline": None,   # added with PQI (additive)
+        "progress": 30,   # live run progress for the console (471a702, additive)
     }]
     assert sql(pg, "SELECT person_id, employee_code, captured_email FROM sessions") == [(None, None, None)]
     assert database.consume_access_code("1111111111")["used_count"] == 2

@@ -62,6 +62,10 @@ def generate_pqi_pdf(report: dict, candidate: dict) -> bytes:
     band_colour = BAND_COLOURS.get(band, RDC_DARK_GREY)
     master = report.get("master") or {}
     readiness = report.get("readiness") or {}
+    # Reports scored under Rubric v2 name it; earlier reports print as they always did.
+    rubric = report.get("scoring_rubric") or master.get("rubric_version", "")
+    v2 = report.get("scoring_rubric") == "SRT_Scoring_Rubric_v2"
+    completion = report.get("completion") or {}
     story = []
 
     header = Table([
@@ -83,10 +87,20 @@ def generate_pqi_pdf(report: dict, candidate: dict) -> bytes:
         ("Plant / Location:", candidate.get("plant_location", "")),
         ("Assessment Date:", candidate.get("assessment_date", "")),
         ("Report Generated:", datetime.date.today().strftime("%d %B %Y")),
-        ("Master / Rubric:", f"{master.get('version', '')} · {master.get('rubric_version', '')} · "
+        ("Master / Rubric:", f"{master.get('version', '')} · {rubric} · "
                              f"file hash {str(master.get('sha256', ''))[:12]}…"),
         ("Evaluator:", f"{report.get('evaluator_model', '')} · prompt {report.get('prompt_version', '')}"),
     ]
+    if v2:
+        info.append(("Scoring record:", f"{report.get('evaluation_mode', '')} · calibration "
+                                        f"{report.get('calibration', '')} · config {report.get('config_hash', '')}"))
+    if completion:
+        answered = (f"{completion.get('questions_answered')} of {completion.get('questions_presented')} answered "
+                    f"({completion.get('completion_percent')}%)")
+        if completion.get("blank_count"):
+            answered += (f"; {completion['blank_count']} unanswered, counted as 0. Answered-question performance "
+                         f"(diagnostic only): {_num(completion.get('answered_only_overall'))}")
+        info.append(("Completion:", answered))
     table = Table([[Paragraph(k, label), Paragraph(_esc(v), value)] for k, v in info], colWidths=[4.2 * cm, 12.8 * cm])
     table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), RDC_LIGHT_GREY),
                                ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
@@ -113,7 +127,13 @@ def generate_pqi_pdf(report: dict, candidate: dict) -> bytes:
     # Which scale the percentages are on. Reports issued before HR's scale C1
     # have no score_scale and read level x 10, so they print nothing here.
     scale = report.get("score_scale") or {}
-    if scale:
+    if scale and v2:
+        story.append(Paragraph(
+            f"Scores are percentages on {_esc(scale.get('label', scale.get('name', '')))}: each situation's level "
+            f"(0–9) counts as {', '.join(str(p) for p in scale.get('points', []))}%, averaged within each "
+            f"competency. Readiness is decided on this overall with {_esc(readiness.get('basis', 'the pilot bands'))}.",
+            small))
+    elif scale:
         native = report.get("native_scores") or {}
         story.append(Paragraph(
             f"Scores are percentages on {_esc(scale.get('label', scale.get('name', '')))}: each situation's level "
@@ -165,8 +185,11 @@ def generate_pqi_pdf(report: dict, candidate: dict) -> bytes:
         rows = [[Paragraph("<b>SRT</b>", label), Paragraph("<b>Severity / Type</b>", label),
                  Paragraph("<b>Reason</b>", label)]]
         for f in flags:
+            reason = _esc(f["reason"])
+            if f.get("statement"):
+                reason += f"<br/><i>Candidate's words: “{_esc(f['statement'])}”</i>"
             rows.append([Paragraph(_esc(f"{f['srt_id']} (Q{f['question_number']})"), value),
-                         Paragraph(_esc(f"{f['severity']} / {f['type']}"), value), Paragraph(_esc(f["reason"]), value)])
+                         Paragraph(_esc(f"{f['severity']} / {f['type']}"), value), Paragraph(reason, value)])
         table = Table(rows, colWidths=[3 * cm, 3.6 * cm, 10.4 * cm])
         table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), RED_BG),
                                    ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
@@ -209,7 +232,9 @@ def generate_pqi_pdf(report: dict, candidate: dict) -> bytes:
     story.append(PageBreak())
     story.append(_sec("Appendix — SRT Responses and Evaluations", sec))
     story.append(Paragraph("Each SRT is scored 0–9 (10 is a reserved ceiling). AFI evidence is scored 0–5 separately "
-                           "and never added to the SRT score.", ital))
+                           "and never added to the SRT score."
+                           + (" Scored under SRT_Scoring_Rubric_v2: level 5 means a competent PQI could reasonably "
+                              "act on the answer." if v2 else ""), ital))
     q_hdr = sty("PQH", fontName="Helvetica-Bold", fontSize=9.5, textColor=WHITE, leading=12)
     q_score = sty("PQS", fontName="Helvetica-Bold", fontSize=9.5, textColor=WHITE, alignment=TA_CENTER)
     for r in report.get("srt_results") or []:
@@ -222,10 +247,22 @@ def generate_pqi_pdf(report: dict, candidate: dict) -> bytes:
         decision = r["decision_made"] + (" — decision cap applied" if "decision" in (r.get("caps_applied") or []) else "")
         afi = ("not scored" if not r["afi_activated"]
                else f"level {r['afi_evidence_level']} of 5") + f" (applicability {r['afi_applicability']})"
-        lines = [
-            f"<b>Core level</b> {r['core_response_level']}  ·  <b>Lift</b> {r['excellence_lift']}  ·  "
-            f"<b>Decision made</b> {_esc(decision)}  ·  <b>AFI</b> {_esc(afi)}",
-        ]
+        if r.get("rubric"):
+            lines = [
+                f"<b>Level</b> {r['raw_level']}  ·  <b>Essential judgment</b> {_esc(r.get('essential_judgment') or '')}"
+                f"  ·  <b>Decision made</b> {_esc(decision)}  ·  <b>AFI</b> {_esc(afi)}  ·  "
+                f"<b>Confidence</b> {_esc(r.get('evaluation_confidence') or '')}",
+            ]
+            if r.get("serious_negative"):
+                lines.append("<b>Serious negative</b> recorded.")
+            if r.get("critical_failure_unverified"):
+                lines.append("<b>Possible Critical Failure not confirmed</b>: the evaluator's quote is not in the "
+                             "response, so no cap was applied.")
+        else:
+            lines = [
+                f"<b>Core level</b> {r['core_response_level']}  ·  <b>Lift</b> {r['excellence_lift']}  ·  "
+                f"<b>Decision made</b> {_esc(decision)}  ·  <b>AFI</b> {_esc(afi)}",
+            ]
         if r["critical_failure"]:
             lines.append(f"<b>Critical Failure</b> ({_esc(r['critical_failure_severity'])} / "
                          f"{_esc(r['critical_failure_type'])}): {_esc(r['critical_failure_reason'])}")
@@ -237,14 +274,18 @@ def generate_pqi_pdf(report: dict, candidate: dict) -> bytes:
             Paragraph(f"<b>Response</b>{' (' + _esc(r['response_capture']) + ')' if r.get('response_capture') else ''}:"
                       f" {response_html}", small),
             Paragraph("<br/>".join(lines), small),
-            Paragraph("<b>Justification:</b> " + _esc(" ".join(r.get("score_justification") or [])), small),
-            Paragraph("<b>Primary gap:</b> " + _esc(r.get("primary_gap") or ""), small),
+            Paragraph(("<b>Key evidence:</b> " if r.get("rubric") else "<b>Justification:</b> ")
+                      + _esc(" ".join(r.get("score_justification") or [])), small),
+            Paragraph(("<b>Material gap:</b> " if r.get("rubric") else "<b>Primary gap:</b> ")
+                      + _esc(r.get("primary_gap") or ""), small),
             Spacer(1, 0.25 * cm),
         ]
         story.append(KeepTogether(block))
 
     story += [Spacer(1, 0.4 * cm), Paragraph(
-        "Confidential. For HR and authorised assessors only. Readiness bands are provisional until pilot calibration. "
+        "Confidential. For HR and authorised assessors only. "
+        + ("Readiness bands are pilot-calibrated. " if v2 else "Readiness bands are provisional until pilot calibration. ")
+        + 
         "RDC – Situation Based Competency Assessment Engine (RDC-KYS).", footer)]
     doc.build(story)
     return buf.getvalue()

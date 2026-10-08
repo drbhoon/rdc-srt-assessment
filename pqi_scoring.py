@@ -9,6 +9,13 @@ All settings come from the master.
 """
 from __future__ import annotations
 
+import re
+
+import pqi_rubric_v2 as v2
+
+RUBRIC_V1 = "SRT_Scoring_Rubric_v1"
+RUBRIC_V2 = v2.RUBRIC_ID
+
 BLANK_JUSTIFICATION = "No response was given."
 
 
@@ -73,7 +80,105 @@ def apply_rules(master, srt, ev: dict) -> dict:
     }
 
 
-def blank_result(master, srt) -> dict:
+def _words(text) -> list:
+    """Lower-case words, any script: punctuation, quotes and spacing don't matter."""
+    return re.findall(r"\w+", str(text or "").lower())
+
+
+def statement_in_response(statement: str, response: str) -> bool:
+    """Are the words the evaluator quoted as a Critical Failure really the candidate's?
+
+    A Critical Failure caps the SRT at 2 and can move readiness, so it must rest
+    on what the candidate wrote, not on a paraphrase. The quote passes when it
+    appears in the response once punctuation and spacing are ignored, or — for
+    a quote of three or more words, to allow for a slip in copying a long or
+    dictated answer — when at least 85% of its words are in the response.
+    """
+    quoted, said = _words(statement), _words(response)
+    if not quoted:
+        return False
+    if " ".join(quoted) in " ".join(said):
+        return True
+    if len(quoted) < 3:
+        return False
+    present = set(said)
+    return sum(1 for w in quoted if w in present) / len(quoted) >= 0.85
+
+
+def apply_rules_v2(master, srt, ev: dict, response_text: str = "") -> dict:
+    """One SRT's final result under Rubric v2, from a validated evaluator observation.
+
+    The evaluator gives one 0–9 level. The application applies the decision cap
+    and, for a Critical Failure whose quoted words are really in the response,
+    the Critical Failure cap. A Critical Failure the quote does not support is
+    NOT confirmed: the level stands, and the SRT goes to second review.
+    """
+    level = ev["raw_level"]
+    score = level
+    decision_applicable = srt["decision_applicable"] == "Yes"
+    decision_made = ev["decision_made"] if decision_applicable else "Not Applicable"
+    decision_cap_triggered = decision_applicable and decision_made == "No"
+    caps = []
+    if decision_cap_triggered and score > master["decision_cap"]:
+        score = master["decision_cap"]
+        caps.append("decision")
+
+    claimed = bool(ev["critical_failure"])
+    verified = claimed and statement_in_response(ev.get("critical_failure_statement", ""), response_text)
+    if verified and score > master["critical_failure_cap"]:
+        score = master["critical_failure_cap"]
+        caps.append("critical_failure")
+    severity, failure_type = _severity_and_type(srt, verified)
+
+    applicability = srt["afi_applicability"]
+    if applicability == "Yes":
+        afi_activated, afi_level = True, ev["afi_evidence_level"]
+    elif applicability == "Conditional" and ev["afi_activated"] == "Yes":
+        afi_activated, afi_level = True, ev["afi_evidence_level"]
+    else:
+        afi_activated, afi_level = False, None
+
+    evidence = list(ev.get("key_evidence") or [])
+    return {
+        "srt_id":                   srt["srt_id"],
+        "primary_competency":       srt["primary_competency"],
+        "status":                   "scored",
+        "rubric":                   RUBRIC_V2,
+        "raw_level":                level,
+        "final_score":              score,
+        "calibrated_percentage":    level_percent(score),
+        "caps_applied":             caps,
+        "decision_applicable":      decision_applicable,
+        "decision_made":            decision_made,
+        "decision_cap_triggered":   decision_cap_triggered,
+        "essential_judgment":       ev.get("essential_judgment"),
+        "key_evidence":             evidence,
+        "material_gap":             ev.get("material_gap", ""),
+        "low_score_basis":          ev.get("low_score_basis"),
+        "serious_negative":         bool(ev.get("serious_negative")),
+        "critical_failure":         verified,
+        "critical_failure_statement": ev.get("critical_failure_statement", "") if verified else "",
+        "critical_failure_reason":  ev.get("critical_failure_reason", "") if verified else "",
+        "critical_failure_severity": severity,
+        "critical_failure_type":    failure_type,
+        # A Critical Failure the evaluator claimed but its quote did not support.
+        "critical_failure_unverified": claimed and not verified,
+        "critical_failure_claim":   ({"statement": ev.get("critical_failure_statement", ""),
+                                      "reason": ev.get("critical_failure_reason", "")}
+                                     if claimed and not verified else None),
+        "unresolved_contradiction": bool(ev.get("unresolved_contradiction")),
+        "afi_applicability":        applicability,
+        "afi_activated":            afi_activated,
+        "afi_evidence_level":       afi_level,
+        "afi_evidence":             ev.get("afi_evidence", ""),
+        "evaluation_confidence":    ev.get("evaluation_confidence"),
+        # The names every report, console and narrative already read.
+        "score_justification":      evidence,
+        "primary_gap":              ev.get("material_gap", ""),
+    }
+
+
+def blank_result(master, srt, rubric: str = RUBRIC_V1) -> dict:
     """A blank or missing answer: score 0 without calling the evaluator.
 
     A blank AFI=Yes SRT scores AFI 0 and stays in the denominator; a blank
@@ -81,6 +186,40 @@ def blank_result(master, srt) -> dict:
     """
     applicability = srt["afi_applicability"]
     decision_applicable = srt["decision_applicable"] == "Yes"
+    if rubric == RUBRIC_V2:
+        return {
+            "srt_id":                   srt["srt_id"],
+            "primary_competency":       srt["primary_competency"],
+            "status":                   "blank",
+            "rubric":                   RUBRIC_V2,
+            "raw_level":                0,
+            "final_score":              0,
+            "calibrated_percentage":    level_percent(0),
+            "caps_applied":             [],
+            "decision_applicable":      decision_applicable,
+            "decision_made":            "No" if decision_applicable else "Not Applicable",
+            "decision_cap_triggered":   decision_applicable,
+            "essential_judgment":       "No",
+            "key_evidence":             [BLANK_JUSTIFICATION],
+            "material_gap":             "No response.",
+            "low_score_basis":          "No usable answer",
+            "serious_negative":         False,
+            "critical_failure":         False,
+            "critical_failure_statement": "",
+            "critical_failure_reason":  "",
+            "critical_failure_severity": "None",
+            "critical_failure_type":    "None",
+            "critical_failure_unverified": False,
+            "critical_failure_claim":   None,
+            "unresolved_contradiction": False,
+            "afi_applicability":        applicability,
+            "afi_activated":            applicability == "Yes",
+            "afi_evidence_level":       0 if applicability == "Yes" else None,
+            "afi_evidence":             "",
+            "evaluation_confidence":    "High",
+            "score_justification":      [BLANK_JUSTIFICATION],
+            "primary_gap":              "No response.",
+        }
     return {
         "srt_id":                   srt["srt_id"],
         "primary_competency":       srt["primary_competency"],
@@ -153,15 +292,34 @@ def headline(master, results: list) -> dict:
     }
 
 
-def near_boundary(master, overall: float) -> bool:
+def basis(master, rubric: str, results: list, head: dict | None = None) -> dict:
+    """The overall figure and the bands that readiness and the second review use.
+
+    Rubric v1 decides on the master's own scale (level x 10) with the master's
+    bands, exactly as before. Rubric v2 decides on scale C1 — the figure the
+    report prints — with HR's pilot bands.
+    """
+    if rubric == RUBRIC_V2:
+        return {"overall": reported_headline(master, results)["overall"], "bands": v2.PILOT_BANDS,
+                "label": v2.PILOT_BANDS_LABEL, "note": v2.PILOT_NOTE, "scale": CURRENT_SCALE}
+    head = head or headline(master, results)
+    return {"overall": head["overall"], "bands": master["readiness_bands"],
+            "label": "Master readiness bands on the native scale (level x 10)",
+            "note": "Readiness bands are provisional until pilot calibration (Candidate_Output_Spec).",
+            "scale": "native"}
+
+
+def near_boundary(master, overall: float, bands: list | None = None) -> bool:
     proximity = master["second_review_proximity"]
-    return any(abs(overall - band["lower"]) <= proximity for band in master["readiness_bands"] if band["lower"] > 0)
+    bands = bands if bands is not None else master["readiness_bands"]
+    return any(abs(overall - band["lower"]) <= proximity for band in bands if band["lower"] > 0)
 
 
-def review_plan(master, head, results: list, contradictions: list) -> dict:
+def review_plan(master, head, results: list, contradictions: list, decided: dict | None = None) -> dict:
     """SRTs that need a second review, each with the neutral reason given to the reviewer.
 
     The reviewer is never told the total or where it sits against a band.
+    `decided` is basis(); without it, the v1 native figure and master bands.
     """
     plan = {}
     scored = [r for r in results if r["status"] == "scored"]
@@ -169,8 +327,16 @@ def review_plan(master, head, results: list, contradictions: list) -> dict:
         if r["critical_failure"]:
             plan.setdefault(r["srt_id"], "A Critical Failure was recorded in the earlier evaluation.")
     for r in scored:
+        if r.get("critical_failure_unverified"):
+            plan.setdefault(r["srt_id"], "The earlier evaluation recorded a possible Critical Failure, but the "
+                                         "words it quoted could not be found in the candidate's response.")
+    for r in scored:
         if r["unresolved_contradiction"]:
             plan.setdefault(r["srt_id"], "The earlier evaluation noted an unresolved contradiction within this response.")
+    for r in scored:
+        if r.get("evaluation_confidence") == "Low":
+            plan.setdefault(r["srt_id"], "The earlier evaluation recorded low confidence in its reading of this "
+                                         "response.")
     ids = {r["srt_id"] for r in scored}
     for item in contradictions:
         for srt_id in item.get("srt_ids", []):
@@ -180,19 +346,24 @@ def review_plan(master, head, results: list, contradictions: list) -> dict:
     triggers = []
     if any(r["critical_failure"] for r in scored):
         triggers.append("confirmed_critical_failure")
+    if any(r.get("critical_failure_unverified") for r in scored):
+        triggers.append("unverified_critical_failure")
     if any(r["unresolved_contradiction"] for r in scored) or contradictions:
         triggers.append("material_contradiction")
-    if near_boundary(master, head["overall"]):
+    if any(r.get("evaluation_confidence") == "Low" for r in scored):
+        triggers.append("low_confidence")
+    overall = decided["overall"] if decided else head["overall"]
+    if near_boundary(master, overall, decided["bands"] if decided else None):
         triggers.append("near_readiness_boundary")
         for r in scored:
             plan.setdefault(r["srt_id"], "Routine second review of this candidate's evaluations.")
     return {"triggers": triggers, "srts": plan}
 
 
-def readiness(master, head, results: list, review_failures: list | None = None) -> dict:
-    bands = master["readiness_bands"]
+def readiness(master, head, results: list, review_failures: list | None = None, decided: dict | None = None) -> dict:
+    bands = decided["bands"] if decided else master["readiness_bands"]
     order = [b["label"] for b in bands]
-    score_band = _band(bands, head["overall"])["label"]
+    score_band = _band(bands, decided["overall"] if decided else head["overall"])["label"]
     final = score_band
     caps, manual_reasons = [], []
 
@@ -223,14 +394,50 @@ def readiness(master, head, results: list, review_failures: list | None = None) 
         )
     if review_failures:
         manual_reasons.append("Second review could not be completed for " + ", ".join(review_failures) + ".")
+    unverified = [r["srt_id"] for r in results if r.get("critical_failure_unverified")]
+    if unverified:
+        manual_reasons.append(
+            "A possible Critical Failure in " + ", ".join(unverified) + " was not confirmed: the evaluator's quote "
+            "could not be found in the response, so no cap was applied. Read the answer before relying on the result.")
 
-    return {
+    out = {
         "band":                    final,
         "score_band":              score_band,
         "caps":                    caps,
         "manual_review_required":  bool(manual_reasons),
         "manual_review_reasons":   manual_reasons,
-        "provisional_note":        "Readiness bands are provisional until pilot calibration (Candidate_Output_Spec).",
+        "provisional_note":        decided["note"] if decided else
+                                   "Readiness bands are provisional until pilot calibration (Candidate_Output_Spec).",
+    }
+    if decided:
+        out.update(basis=decided["label"], decided_on=round(decided["overall"], 1),
+                   bands=[{k: b[k] for k in ("lower", "upper", "label")} for b in bands])
+    return out
+
+
+def completion(master, results: list, name: str = None) -> dict:
+    """How much of the assessment was answered, and how the answers that were given scored.
+
+    The official result counts a blank as zero and that does not change. This
+    separates "low demonstrated competence" from "incomplete assessment": the
+    answered-question figure is the same C1 calculation over answered SRTs only
+    (competencies with no answer left out). Diagnostic — never the score.
+    """
+    name = name or CURRENT_SCALE
+    answered = [r for r in results if r["status"] == "scored"]
+    presented = len(results)
+    by_code = {}
+    for r in answered:
+        by_code.setdefault(r["primary_competency"], []).append(level_percent(r["final_score"], name))
+    means = [sum(v) / len(v) for v in by_code.values()]
+    return {
+        "questions_presented":  presented,
+        "questions_answered":   len(answered),
+        "blank_count":          presented - len(answered),
+        "completion_percent":   round(100 * len(answered) / presented, 1) if presented else 0.0,
+        "answered_only_overall": round(sum(means) / len(means), 1) if means else None,
+        "answered_only_note":   "Diagnostic only: the same calculation over answered questions. The official score "
+                                "counts unanswered questions as zero.",
     }
 
 

@@ -28,6 +28,9 @@ TYPE_LABEL = "Plant Quality Incharge (PQI)"
 
 @pytest.fixture
 def pqi(store, monkeypatch):
+    # These tests pin Rubric v1, which stays available for the attempts it
+    # scored; Rubric v2 (the default for new attempts) has test_pqi_rubric_v2.py.
+    monkeypatch.setattr(pqi_service, "CURRENT_RUBRIC", pqi_evaluator.RUBRIC_V1)
     fake = pf.FakePqiClaude()
     monkeypatch.setattr(main, "client", fake)
     monkeypatch.setattr(pqi_evaluator, "time", SimpleNamespace(sleep=lambda s: None))

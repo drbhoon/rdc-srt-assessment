@@ -15,21 +15,30 @@ def _pick(*parts) -> int:
     return int(hashlib.sha256("|".join(str(p) for p in parts).encode("utf-8")).hexdigest(), 16)
 
 
-def tool_message(name, data, stop_reason="tool_use"):
+def tool_message(name, data, stop_reason="tool_use", usage=None):
     return SimpleNamespace(
         content=[SimpleNamespace(type="tool_use", id="toolu_fake", name=name, input=data)],
-        stop_reason=stop_reason, usage=None,
+        stop_reason=stop_reason, usage=usage,
     )
 
 
+EVALUATION_TOOLS = ("record_srt_evaluation", "record_srt_evaluation_v2")
+
+
 class FakePqiClaude:
-    def __init__(self, evaluate=None, review=None, consistency=None, report=None):
+    """`evaluate`/`review` answer Rubric v1's tool, `evaluate_v2`/`review_v2` Rubric v2's."""
+
+    def __init__(self, evaluate=None, review=None, consistency=None, report=None,
+                 evaluate_v2=None, review_v2=None, usage=None):
         self.handlers = {
             "evaluate": evaluate or evaluator(),
             "review": review or evaluate or evaluator(),
+            "evaluate_v2": evaluate_v2 or evaluator_v2(),
+            "review_v2": review_v2 or evaluate_v2 or evaluator_v2(),
             "consistency": consistency or (lambda p: {"contradictions": []}),
             "report": report or reporter,
         }
+        self.usage = usage
         self.calls = []
         self.messages = SimpleNamespace(create=self._create)
 
@@ -38,19 +47,21 @@ class FakePqiClaude:
         assert kwargs["tool_choice"] == {"type": "tool", "name": tool}
         instruction, _, body = kwargs["messages"][0]["content"].partition("\n\n")
         payload = json.loads(body)
-        if tool == "record_srt_evaluation":
+        if tool in EVALUATION_TOOLS:
             mode = "review" if "Earlier_Evaluation" in payload else "evaluate"
         elif tool == "record_consistency_check":
             mode = "consistency"
         else:
             mode = "report"
-        self.calls.append({"mode": mode, "instruction": instruction, "payload": payload, "kwargs": kwargs})
-        reply = self.handlers[mode](payload)
+        self.calls.append({"mode": mode, "instruction": instruction, "payload": payload, "kwargs": kwargs,
+                           "tool": tool})
+        handler = mode + "_v2" if tool == "record_srt_evaluation_v2" else mode
+        reply = self.handlers[handler](payload)
         if isinstance(reply, BaseException):
             raise reply
         if isinstance(reply, SimpleNamespace):
             return reply
-        return tool_message(tool, reply)
+        return tool_message(tool, reply, usage=self.usage)
 
     def modes(self):
         return [c["mode"] for c in self.calls]
@@ -120,3 +131,57 @@ def reporter(payload):
         ],
         "development_narrative": "The candidate protects quality evidence.\nNext: build the team's capability.",
     }
+
+
+# ── Rubric v2 ────────────────────────────────────────────────────────────────
+LOW_BASIS = "Materially deficient judgment"
+NOT_LOW = "Not applicable (level 4 or higher)"
+
+
+def evaluation_v2(payload, level=5, decision="Yes", critical="No", statement="", reason="", contradiction=False,
+                  afi_activated="Yes", afi_level=3, confidence="High", essential="Yes", serious="No", basis=None):
+    srt = payload["SRT"]
+    applicability = srt["Anti_Firefighting_Applicability"]
+    if applicability == "Yes":
+        activated, afi = "Yes", afi_level
+    elif applicability == "Conditional":
+        activated = afi_activated
+        afi = afi_level if activated == "Yes" else None
+    else:
+        activated, afi = "Not Applicable", None
+    return {
+        "srt_id": srt["SRT_ID"],
+        "raw_level": level,
+        "decision_made": decision if srt["Decision_Applicable"] == "Yes" else "Not Applicable",
+        "essential_judgment": essential,
+        "key_evidence": [f"Evidence for {srt['SRT_ID']}"],
+        "material_gap": f"Gap for {srt['SRT_ID']}",
+        "low_score_basis": basis or (LOW_BASIS if level <= 3 else NOT_LOW),
+        "serious_negative": serious,
+        "critical_failure": critical,
+        "critical_failure_statement": statement,
+        "critical_failure_reason": reason,
+        "unresolved_contradiction": contradiction,
+        "afi_activated": activated,
+        "afi_evidence_level": afi,
+        "afi_evidence": "Some prevention evidence." if afi else "",
+        "evaluation_confidence": confidence,
+    }
+
+
+def evaluator_v2(rule=None, **fixed):
+    """Deterministic Rubric v2 evaluations; `fixed` pins fields, `rule(srt_id, payload)` per SRT."""
+    def handler(payload):
+        srt_id = payload["SRT"]["SRT_ID"]
+        n = _pick("v2", srt_id, payload["Candidate"]["Candidate_Response"])
+        fields = {"level": 2 + n % 7, "afi_level": (n >> 5) % 6,
+                  "decision": "No" if (n >> 7) % 6 == 0 else "Yes",
+                  "afi_activated": "Yes" if (n >> 9) % 2 else "No"}
+        fields.update(fixed)
+        if rule:
+            extra = rule(srt_id, payload)
+            if isinstance(extra, (BaseException, SimpleNamespace)):
+                return extra
+            fields.update(extra or {})
+        return evaluation_v2(payload, **fields)
+    return handler

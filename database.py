@@ -132,6 +132,9 @@ def init_db():
                 ("deadline_at",     "TIMESTAMP"),  # UTC; start + ASSESSMENT_MINUTES, never extended
                 ("last_saved_at",   "TIMESTAMP"),
                 ("answer_meta",     "JSONB"),      # {srt_id: {input, language}}
+                # Headline of every report a full re-score replaced, oldest
+                # first, so a re-score never loses the result it superseded.
+                ("report_history",  "JSONB"),
             ):
                 cur.execute(f"ALTER TABLE sessions ADD COLUMN IF NOT EXISTS {column} {sql_type} NULL")
             cur.execute("""
@@ -360,7 +363,8 @@ def get_session(session_id: str) -> Optional[dict]:
                           processing_started_at, candidate_type,
                           assessment_type, master_version, rubric_version, master_sha256,
                           prompt_version, evaluator_model, generation_seed, generation_info,
-                          srt_snapshot, deadline_at, last_saved_at, answer_meta
+                          srt_snapshot, deadline_at, last_saved_at, answer_meta,
+                          report_history
                    FROM sessions WHERE session_id = %s""",
                 (session_id,),
             )
@@ -384,6 +388,7 @@ def get_session(session_id: str) -> Optional[dict]:
                 "deadline_at":       (row[23].isoformat() + "Z") if row[23] else None,
                 "last_saved_at":     (row[24].isoformat() + "Z") if row[24] else None,
                 "answer_meta":       _json_value(row[25]),
+                "report_history":    _json_value(row[26]),   # PQI: reports a full re-score replaced
                 "candidate": {
                     "candidate_name":  row[0],
                     "plant_location":  row[1],
@@ -434,6 +439,8 @@ def update_session(session_id: str, **fields):
         "answer_meta":       ("answer_meta",       lambda v: json.dumps(v)),
         "prompt_version":    ("prompt_version",    lambda v: v),
         "evaluator_model":   ("evaluator_model",   lambda v: v),
+        "rubric_version":    ("rubric_version",    lambda v: v),
+        "report_history":    ("report_history",    lambda v: json.dumps(v)),
         "last_saved_at":     ("last_saved_at",     lambda v: v),  # naive UTC datetime
     }
 

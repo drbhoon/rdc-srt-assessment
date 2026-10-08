@@ -21,6 +21,7 @@ from models import (
 import assessment_types
 import pqi_service
 import pqi_scoring
+import pqi_validation
 from assessment_types import PLANT_MANAGER, PQI
 from identity import resolve_employee, resolve_person, identity_configured
 from question_bank import load_questions, get_session_questions
@@ -457,6 +458,8 @@ async def rescore_session(
         # whatever skill prompt is currently deployed. Use for calibration
         # tests after a prompt change. The pipeline will see an empty
         # scores dict and score every question fresh.
+        pqi_fields = (pqi_service.full_rescore_fields(session)
+                      if session.get("assessment_type") == PQI else {})
         session["scores"]    = {}
         session["report"]    = None
         session["pdf_bytes"] = None
@@ -464,6 +467,7 @@ async def rescore_session(
         session["error"]     = None
         session["status"]    = "processing"
         session["progress"]  = 0
+        session.update(pqi_fields)
         _cache[session_id]   = session
 
         update_session(
@@ -476,6 +480,7 @@ async def rescore_session(
             status="processing",
             progress=0,
             processing_started_at=_now_utc(),
+            **pqi_fields,
         )
 
         background_tasks.add_task(_pipeline_guarded, session_id, "rescore-full")
@@ -596,6 +601,72 @@ async def reissue_all_pqi_reports(background_tasks: BackgroundTasks,
             queued.append({"session_id": s["session_id"], "name": s.get("candidate_name")})
     logger.info("Admin re-issue of %d PQI report(s) on scale %s queued", len(queued), pqi_scoring.CURRENT_SCALE)
     return {"status": "reissuing", "scale": pqi_scoring.CURRENT_SCALE, "queued": queued}
+
+
+# ─── API: Admin — PQI scoring-engine validation (Rubric v2) ──────────────────
+@app.post("/api/admin/pqi/rescore-all")
+async def rescore_all_pqi(background_tasks: BackgroundTasks, include_current: bool = False,
+                          x_admin_token: str = Header(None), x_auth_email: str = Header(None)):
+    """Full re-score of every PQI attempt with stored answers under the current rubric.
+
+    The validation step after a rubric change: every candidate is re-scored
+    with the same prompt and model, so results are never compared across
+    evaluator versions. Each attempt keeps the headline of the report it
+    replaces (report_history). Attempts already completed on the current rubric
+    are skipped unless include_current=true; attempts still being taken or
+    already processing are never touched.
+    """
+    if not _admin_identity(x_admin_token, x_auth_email):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    rubric = pqi_service.CURRENT_RUBRIC
+    queued, skipped = [], []
+    for s in list_sessions():
+        if s.get("assessment_type") != PQI:
+            continue
+        sid, name = s["session_id"], s.get("candidate_name")
+        if s.get("status") in ("in_progress", "processing"):
+            skipped.append({"session_id": sid, "name": name, "reason": s.get("status")})
+            continue
+        if (s.get("collected_count") or 0) <= 0:
+            skipped.append({"session_id": sid, "name": name, "reason": "no stored answers"})
+            continue
+        if (not include_current and s.get("status") == "completed"
+                and (s.get("pqi_headline") or {}).get("rubric") == rubric):
+            skipped.append({"session_id": sid, "name": name, "reason": f"already on {rubric}"})
+            continue
+        full = _get(sid)
+        if not full or not (full.get("collected_answers") or {}):
+            skipped.append({"session_id": sid, "name": name, "reason": "no answers in record"})
+            continue
+        fields = pqi_service.full_rescore_fields(full)
+        full.update(scores={}, report=None, pdf_bytes=None, pdf_error=None, error=None,
+                    status="processing", progress=0, **fields)
+        _cache[sid] = full
+        update_session(sid, scores={}, report=None, pdf_bytes=None, pdf_error=None, error=None,
+                       status="processing", progress=0, processing_started_at=_now_utc(), **fields)
+        background_tasks.add_task(_pipeline_guarded, sid, "pqi-rescore-all")
+        queued.append({"session_id": sid, "name": name})
+    logger.info("Admin PQI re-score of %d attempt(s) under %s queued (%d skipped)", len(queued), rubric, len(skipped))
+    return {"status": "rescoring", "rubric": rubric, "queued": queued, "skipped": skipped,
+            "concurrency": _PIPELINE_MAX_CONCURRENT}
+
+
+@app.get("/api/admin/pqi/validation.xlsx")
+async def pqi_validation_workbook(x_admin_token: str = Header(None), x_auth_email: str = Header(None)):
+    """The validation table HR asked for after a rubric change, as Excel."""
+    if not _admin_identity(x_admin_token, x_auth_email):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    sessions = []
+    for s in list_sessions():
+        if s.get("assessment_type") == PQI:
+            full = _get(s["session_id"])
+            if full:
+                sessions.append({**full, "session_id": s["session_id"]})
+    data = pqi_validation.build_workbook(sessions)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
+    return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="PQI_Validation_{stamp}.xlsx"',
+                             "Cache-Control": "no-store"})
 
 
 @app.post("/api/admin/rescore-stuck")
@@ -735,6 +806,7 @@ async def rescore_validation_batch(
             continue
 
         # FORCE-FULL wipe — every question re-scored under v2.5
+        pqi_fields = pqi_service.full_rescore_fields(full) if full.get("assessment_type") == PQI else {}
         full["scores"]    = {}
         full["report"]    = None
         full["pdf_bytes"] = None
@@ -742,11 +814,12 @@ async def rescore_validation_batch(
         full["error"]     = None
         full["status"]    = "processing"
         full["progress"]  = 0
+        full.update(pqi_fields)
         _cache[sid]       = full
         update_session(
             sid, scores={}, report=None, pdf_bytes=None, pdf_error=None,
             error=None, status="processing", progress=0,
-            processing_started_at=_now_utc(),
+            processing_started_at=_now_utc(), **pqi_fields,
         )
         background_tasks.add_task(_pipeline_guarded, sid, "rescore-validation-batch")
         scheduled.append(name or sid)
