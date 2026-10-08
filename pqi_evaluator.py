@@ -346,6 +346,16 @@ def _enum_field(data, key, allowed):
     raise ReplyFormatError(f"{key} must be one of {allowed}, got {value!r}")
 
 
+def _afi_missing(applicability) -> str:
+    """Worded for the evaluator too: on a retry it is told exactly this."""
+    if applicability == "Yes":
+        return ("afi_evidence_level is required when AFI applies: this SRT's Anti_Firefighting_Applicability is "
+                "Yes, so AFI is always scored — give an integer 0–5, using 0 when the response shows no "
+                "prevention evidence")
+    return ("afi_evidence_level is required when AFI applies: you set afi_activated to Yes on a Conditional SRT, "
+            "so give an integer 0–5 — or set afi_activated to No if recurrence prevention is not relevant here")
+
+
 def parse_evaluation(srt, data: dict) -> dict:
     if not isinstance(data, dict):
         raise ReplyFormatError("evaluation is not an object")
@@ -361,7 +371,7 @@ def parse_evaluation(srt, data: dict) -> dict:
     level = _int_field(data, "afi_evidence_level", 0, 5, allow_none=True)
     applicability = srt["afi_applicability"]
     if (applicability == "Yes" or (applicability == "Conditional" and activated == "Yes")) and level is None:
-        raise ReplyFormatError("afi_evidence_level is required when AFI applies")
+        raise ReplyFormatError(_afi_missing(applicability))
     justification = data.get("score_justification")
     if isinstance(justification, str):
         justification = [justification]
@@ -407,7 +417,7 @@ def parse_evaluation_v2(srt, data: dict) -> dict:
     afi_level = _int_field(data, "afi_evidence_level", 0, 5, allow_none=True)
     applicability = srt["afi_applicability"]
     if (applicability == "Yes" or (applicability == "Conditional" and activated == "Yes")) and afi_level is None:
-        raise ReplyFormatError("afi_evidence_level is required when AFI applies")
+        raise ReplyFormatError(_afi_missing(applicability))
     evidence = data.get("key_evidence")
     if isinstance(evidence, str):
         evidence = [evidence]
@@ -490,8 +500,15 @@ def _tool_input(message, tool_name):
 
 
 def call_tool(client, *, model, system, tool, content, max_tokens, parse, label):
-    """One forced tool call with retries. Returns (raw tool input, parsed value)."""
+    """One forced tool call with retries. Returns (raw tool input, parsed value).
+
+    A reply rejected by validation is retried with the reason prepended to the
+    request: resending the identical request tends to get the identical
+    mistake back three times. The system prompt — the cached part — is
+    unchanged, and so is the prompt version.
+    """
     last = None
+    feedback = ""
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
             kwargs = dict(
@@ -500,7 +517,7 @@ def call_tool(client, *, model, system, tool, content, max_tokens, parse, label)
                 system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
                 tools=[tool],
                 tool_choice={"type": "tool", "name": tool["name"]},
-                messages=[{"role": "user", "content": content}],
+                messages=[{"role": "user", "content": feedback + content}],
             )
             if _TEMPERATURE:
                 kwargs["temperature"] = float(_TEMPERATURE)
@@ -518,6 +535,10 @@ def call_tool(client, *, model, system, tool, content, max_tokens, parse, label)
             raise EvaluatorError(f"{type(exc).__name__}: {str(exc)[:300]}") from exc
         except (anthropic.APIError, ReplyFormatError) as exc:
             last = exc
+            if isinstance(exc, ReplyFormatError):
+                reason = " ".join(str(exc).split())
+                feedback = (f"Your previous {tool['name']} call was rejected: {reason}. "
+                            "Record the evaluation again with this corrected; everything else stands as instructed.\n")
             if attempt == MAX_ATTEMPTS:
                 break
             delay = BACKOFF_SECONDS[min(attempt - 1, len(BACKOFF_SECONDS) - 1)]

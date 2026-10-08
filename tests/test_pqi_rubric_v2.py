@@ -395,3 +395,34 @@ def test_reissue_keeps_a_v2_report_on_v2(pqi2, monkeypatch):
     assert after["report"]["scoring_rubric"] == ev.RUBRIC_V2
     assert after["report"]["overall_readiness"] == before["report"]["overall_readiness"]
     assert after["report"]["readiness"]["basis"] == v2.PILOT_BANDS_LABEL
+
+
+def test_a_rejected_reply_is_retried_with_the_reason(pqi2, monkeypatch):
+    # Production, 2026-10-08: the evaluator left AFI_Evidence_Level empty on
+    # AFI=Yes SRTs, the identical retry got the identical reply, and the run
+    # failed three times over. The retry now says what was wrong.
+    form_with(monkeypatch, "C1-10")
+    seen = {"n": 0}
+
+    def rule(srt_id, payload):
+        if srt_id == "C1-10":
+            seen["n"] += 1
+            if seen["n"] == 1:
+                return {"level": 4, "afi_level": None}
+        return {"level": 5, "decision": "Yes"}
+    use_claude(pqi2, monkeypatch, pf.FakePqiClaude(evaluate_v2=pf.evaluator_v2(rule)))
+    sid = start(pqi2, new_code(pqi2)).json()["session_id"]
+    answer_all(pqi2, sid)
+    stored = session(sid)
+
+    assert stored["status"] == "completed"
+    calls = [c for c in pqi2.fake.calls if c["mode"] == "evaluate" and c["payload"]["SRT"]["SRT_ID"] == "C1-10"]
+    assert len(calls) == 2
+    assert not calls[0]["instruction"].startswith("Your previous")
+    told = calls[1]["instruction"]
+    assert told.startswith("Your previous record_srt_evaluation_v2 call was rejected: afi_evidence_level is required")
+    assert "Anti_Firefighting_Applicability is Yes" in told and "using 0 when" in told
+    # Same system prompt (cached) and same prompt version as every other call.
+    assert calls[1]["kwargs"]["system"] == calls[0]["kwargs"]["system"]
+    assert stored["scores"]["C1-10"]["afi_evidence_level"] is not None
+    assert stored["report"]["prompt_version"] == stored["prompt_version"]
