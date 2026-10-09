@@ -1018,3 +1018,28 @@ def increment_bank_administrations(sha256: str, srt_ids: List[str]) -> None:
         conn.commit()
     finally:
         conn.close()
+
+
+def session_identities(session_ids) -> dict:
+    """{session_id: {"employee_code", "captured_email"}} — who each attempt belongs to.
+
+    A separate read rather than more keys on get_session, whose shape the Plant
+    Manager tests pin. Used by the PQI results report.
+    """
+    ids = [s for s in session_ids or () if s]
+    if not ids:
+        return {}
+    if not DATABASE_URL:
+        out = {}
+        for sid in ids:
+            c = (_memory_store.get(sid) or {}).get("candidate") or {}
+            out[sid] = {"employee_code": c.get("employee_code"), "captured_email": c.get("captured_email")}
+        return out
+    conn = _get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT session_id, employee_code, captured_email FROM sessions WHERE session_id = ANY(%s)",
+                        (ids,))
+            return {row[0]: {"employee_code": row[1], "captured_email": row[2]} for row in cur.fetchall()}
+    finally:
+        conn.close()

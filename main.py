@@ -21,9 +21,10 @@ from models import (
 import assessment_types
 import pqi_service
 import pqi_scoring
+import pqi_results
 import pqi_validation
 from assessment_types import PLANT_MANAGER, PQI
-from identity import resolve_employee, resolve_person, identity_configured
+from identity import resolve_employee, resolve_person, identity_configured, master_designations
 from question_bank import load_questions, get_session_questions
 from scorer import (
     score_question, review_pass,
@@ -37,7 +38,7 @@ from database import (
     create_access_code, get_access_code, consume_access_code,
     list_access_codes, delete_access_code,
     auto_fail_stale_processing,
-    find_active_session, list_evaluations,
+    find_active_session, list_evaluations, session_identities,
 )
 from datetime import datetime, timezone
 
@@ -666,6 +667,32 @@ async def pqi_validation_workbook(x_admin_token: str = Header(None), x_auth_emai
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
     return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": f'attachment; filename="PQI_Validation_{stamp}.xlsx"',
+                             "Cache-Control": "no-store"})
+
+
+@app.get("/api/admin/pqi/results.xlsx")
+async def pqi_results_workbook(x_admin_token: str = Header(None), x_auth_email: str = Header(None)):
+    """HR's PQI results report: one row per candidate — who they are, the headline
+    scores, readiness and the ten competency scores. No AI calls."""
+    if not _admin_identity(x_admin_token, x_auth_email):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    sessions = []
+    for s in list_sessions():
+        if s.get("assessment_type") == PQI:
+            full = _get(s["session_id"])
+            if full:
+                sessions.append({**full, "session_id": s["session_id"]})
+    identities = session_identities([s["session_id"] for s in sessions])
+    designations = await asyncio.to_thread(
+        master_designations, [i.get("employee_code") for i in identities.values()])
+    try:
+        master = pqi_service.current_master()
+    except pqi_service.PqiUnavailable:
+        master = None
+    data = pqi_results.build_results(sessions, identities, designations, master)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
+    return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="PQI_Results_{stamp}.xlsx"',
                              "Cache-Control": "no-store"})
 
 

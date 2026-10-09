@@ -32,6 +32,7 @@ import json
 import logging
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 
 logger = logging.getLogger(__name__)
@@ -160,3 +161,27 @@ def resolve_person(email: str, employee_code: str | None = None,
     except Exception as err:                      # timeout, DNS, refused
         logger.error("[identity] resolve failed: %s", err)
         return {"ok": False, "reason": "unavailable", "message": None}
+
+
+def master_designations(codes) -> dict:
+    """{employee_code: designation} for the given codes, from the employee master.
+
+    For the HR results report: designation is not stored with an attempt, and
+    the master's current one is what HR wants to read beside the score. One
+    batched GET. Best effort — unconfigured, unreachable or slow returns {}, and
+    the report prints without designations rather than not at all.
+    """
+    codes = sorted({str(c).strip() for c in codes or () if c and str(c).strip()})
+    if not codes or not identity_configured():
+        return {}
+    query = urllib.parse.urlencode([("fields", "picker")] + [("code", c) for c in codes])
+    request = urllib.request.Request(f"{MASTER_API_URL}/api/master/employees?{query}",
+                                     headers={"x-master-key": MASTER_API_KEY})
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            rows = json.loads(response.read().decode("utf-8")).get("employees") or []
+    except Exception as err:                      # HTTP error, timeout, DNS, refused, bad JSON
+        logger.error("[identity] designation lookup failed: %s", err)
+        return {}
+    return {str(r.get("employee_code") or "").strip().casefold(): r.get("designation") or ""
+            for r in rows if r.get("employee_code")}
