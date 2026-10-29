@@ -21,11 +21,13 @@ from models import (
 import assessment_types
 import pqi_service
 import pqi_scoring
+import pm_results
 import pqi_results
+from ai_account import account_problem
 import pqi_validation
 from assessment_types import PLANT_MANAGER, PQI
 from identity import resolve_employee, resolve_person, identity_configured, master_designations
-from question_bank import load_questions, get_session_questions
+from question_bank import load_questions, get_session_questions, REQUIRED_COMPETENCIES
 from scorer import (
     score_question, review_pass,
     REVIEW_LOW_THRESHOLD, REVIEW_HIGH_THRESHOLD,
@@ -670,30 +672,50 @@ async def pqi_validation_workbook(x_admin_token: str = Header(None), x_auth_emai
                              "Cache-Control": "no-store"})
 
 
-@app.get("/api/admin/pqi/results.xlsx")
-async def pqi_results_workbook(x_admin_token: str = Header(None), x_auth_email: str = Header(None)):
-    """HR's PQI results report: one row per candidate — who they are, the headline
-    scores, readiness and the ten competency scores. No AI calls."""
-    if not _admin_identity(x_admin_token, x_auth_email):
-        raise HTTPException(status_code=401, detail="Unauthorized")
+async def _results_inputs(assessment_type: str):
+    """Every attempt of one type, who each belongs to, and their current designations."""
     sessions = []
     for s in list_sessions():
-        if s.get("assessment_type") == PQI:
+        if s.get("assessment_type") == assessment_type:
             full = _get(s["session_id"])
             if full:
                 sessions.append({**full, "session_id": s["session_id"]})
     identities = session_identities([s["session_id"] for s in sessions])
     designations = await asyncio.to_thread(
         master_designations, [i.get("employee_code") for i in identities.values()])
+    return sessions, identities, designations
+
+
+def _xlsx(data: bytes, prefix: str) -> Response:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
+    return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="{prefix}_{stamp}.xlsx"',
+                             "Cache-Control": "no-store"})
+
+
+@app.get("/api/admin/pm/results.xlsx")
+async def pm_results_workbook(x_admin_token: str = Header(None), x_auth_email: str = Header(None)):
+    """HR's Plant Manager results report, in the PQI report's layout. No AI calls."""
+    if not _admin_identity(x_admin_token, x_auth_email):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    sessions, identities, designations = await _results_inputs(PLANT_MANAGER)
+    data = pm_results.build_results(sessions, identities, designations, REQUIRED_COMPETENCIES, READINESS_TIERS)
+    return _xlsx(data, "PlantManager_Results")
+
+
+@app.get("/api/admin/pqi/results.xlsx")
+async def pqi_results_workbook(x_admin_token: str = Header(None), x_auth_email: str = Header(None)):
+    """HR's PQI results report: one row per candidate — who they are, the headline
+    scores, readiness and the ten competency scores. No AI calls."""
+    if not _admin_identity(x_admin_token, x_auth_email):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    sessions, identities, designations = await _results_inputs(PQI)
     try:
         master = pqi_service.current_master()
     except pqi_service.PqiUnavailable:
         master = None
     data = pqi_results.build_results(sessions, identities, designations, master)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
-    return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    headers={"Content-Disposition": f'attachment; filename="PQI_Results_{stamp}.xlsx"',
-                             "Cache-Control": "no-store"})
+    return _xlsx(data, "PQI_Results")
 
 
 @app.post("/api/admin/rescore-stuck")
@@ -1845,10 +1867,13 @@ async def process_assessment_async(session_id: str) -> None:
             logger.info("Report generated for session %s", session_id)
         except Exception as exc:
             logger.error("Report generation failed for %s: %s", session_id, exc, exc_info=True)
+            # An exhausted or rejected AI account is said in plain words: it is
+            # fixed in the Anthropic console, not by rescoring again and again.
+            message = account_problem(exc) or str(exc)
             session["status"] = "failed"
-            session["error"]  = str(exc)
+            session["error"]  = message
             # v4.20: clear processing_started_at so the watchdog doesn't re-fail us
-            update_session(session_id, status="failed", error=str(exc), processing_started_at=None)
+            update_session(session_id, status="failed", error=message, processing_started_at=None)
             return
 
         # ── Step 4: Generate PDF ─────────────────────────────────────────────
@@ -1869,10 +1894,10 @@ async def process_assessment_async(session_id: str) -> None:
 
     except Exception as exc:
         logger.error("FATAL background task error for session %s: %s", session_id, exc, exc_info=True)
+        message = account_problem(exc) or f"Unexpected error: {str(exc)}"
         session["status"] = "failed"
-        session["error"]  = f"Unexpected error: {str(exc)}"
-        update_session(session_id, status="failed", error=f"Unexpected error: {str(exc)}",
-                       processing_started_at=None)
+        session["error"]  = message
+        update_session(session_id, status="failed", error=message, processing_started_at=None)
 
 
 # ─── API: Submit All Answers ─────────────────────────────────────────────────

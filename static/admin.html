@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Admin Panel – RDC SRT Assessment</title>
-  <!-- v4.26 — PQI Results (Excel) for HR. v4.25 — PQI Rubric v2: rubric shown per report and row, "Re-score all on Rubric v2", validation table download, v2 SRT detail. v4.24 — list refreshes itself while anything runs; live PQI progress; Rescore locked during a run; PQI reports on scale C1 with re-issue. v4.23 — one engine name; tabs, columns and pickers render from the assessment registry; skill v2.5: 9-cap, double-pass extreme-total review, per-competency recognition, top tier gated >250, integrity override, re-baseline batch -->
+  <!-- v4.28 — Plant Manager Results (Excel), same layout as PQI. v4.27 — AI-account problems (credit exhausted, usage limit, key) named under the Failed badge. v4.26 — PQI Results (Excel) for HR. v4.25 — PQI Rubric v2: rubric shown per report and row, "Re-score all on Rubric v2", validation table download, v2 SRT detail. v4.24 — list refreshes itself while anything runs; live PQI progress; Rescore locked during a run; PQI reports on scale C1 with re-issue. v4.23 — one engine name; tabs, columns and pickers render from the assessment registry; skill v2.5: 9-cap, double-pass extreme-total review, per-competency recognition, top tier gated >250, integrity override, re-baseline batch -->
   <link rel="stylesheet" href="/static/style.css?v=4.23"/>
   <style>
     body { background: #f0f3f8; }
@@ -304,7 +304,7 @@
       <div>
         <h1>
           <span id="dashTitle">RDC – Situation Based Competency Assessment Engine (RDC-KYS)</span>
-          <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.26</span>
+          <span class="version-badge" title="Frontend build — confirms this browser has the latest admin.html loaded">v4.28</span>
         </h1>
         <div class="sub">Admin Panel | Confidential – Head Office Use Only</div>
       </div>
@@ -333,6 +333,7 @@
     <button class="btn-rescore-bulk" onclick="rescoreAllStuck()" title="Rescue every session that has all 30 answers but is stuck 'In Progress'. Uses stored transcripts — no candidate involvement. Processes 2 at a time.">🚑 Rescore All Stuck</button>
     <button class="btn-rescore-bulk" id="reissueAllBtn" style="background:#16a085;display:none;" onclick="reissueAllPqi()" title="Re-issue every completed PQI report that is not yet on the current score scale. Uses the stored evaluations — nothing is re-evaluated; one AI call per report for the narrative.">↻ Re-issue all on new scale</button>
     <button class="btn-rescore-bulk pqi-only" id="pqiRescoreAllBtn" style="background:#c0392b;display:none;" onclick="rescoreAllPqi()" title="Full re-score of every PQI attempt under the current scoring rubric, with the same prompt and model for all. Each attempt keeps the result it replaces for the validation table. About 35-60 AI calls per candidate.">⟳ Re-score all on current rubric</button>
+    <button class="btn btn-primary btn-sm pm-only" id="pmResultsBtn" onclick="downloadPmResults()" title="Excel for HR: one row per candidate — employee code, name, designation, location, total /300, score /100, readiness, integrity flag, the ten competency scores, strengths and development areas. Unfinished candidates on a second sheet.">📊 Results (Excel)</button>
     <button class="btn btn-primary btn-sm pqi-only" id="pqiResultsBtn" style="display:none;" onclick="downloadPqiResults()" title="Excel for HR: one row per candidate — employee code, name, designation, location, Overall, Technical, Business, AFI, readiness, the ten competency scores, flags, strengths and development priorities. Unfinished candidates on a second sheet.">📊 Results (Excel)</button>
     <button class="btn btn-outline btn-sm pqi-only" id="pqiValidationBtn" style="display:none;" onclick="downloadPqiValidation()" title="Excel: previous vs revised score, technical, business, AFI, readiness, blanks; competency scores, all 30 SRT levels, level counts, Critical Failures and second-review changes. No AI calls.">⬇️ Validation table</button>
     <button class="btn-rescore-bulk" style="background:#8e44ad;" onclick="rescoreValidationBatch()" title="RE-BASELINE: force-full rescore ALL completed sessions under the current skill (v2.5). Wipes prior scores so every question is re-scored fresh. ~30 calls/candidate — slow and uses API quota. Use after a skill calibration change.">⟳⟳ Re-baseline All</button>
@@ -578,6 +579,7 @@ function setAssessment(type) {
     present(activeAssessment).avg_label || 'Avg Score';
   document.getElementById('reissueAllBtn').style.display = reportStyle(activeAssessment) === 'pqi' ? '' : 'none';
   document.querySelectorAll('.pqi-only').forEach(b => { b.style.display = reportStyle(activeAssessment) === 'pqi' ? '' : 'none'; });
+  document.querySelectorAll('.pm-only').forEach(b => { b.style.display = reportStyle(activeAssessment) === 'pqi' ? 'none' : ''; });
   renderPqiBanner();
   updateStats();
   renderTable();
@@ -799,7 +801,11 @@ function renderTable() {
       badgeHtml = `<span class="badge-completed">✅ Completed</span>`;
     } else if (isFailed) {
       const errTip = s.error ? escHtml(s.error) : 'Pipeline failed — click Rescore to retry';
-      badgeHtml = `<span class="badge-failed" title="${errTip}">❌ Failed</span>`;
+      // An AI-account problem (credit, usage limit, key) is named under the
+      // badge: it is fixed in the Anthropic console, not by rescoring repeatedly.
+      const account = /^Anthropic /.test(s.error || '') ? s.error.split(' — ')[0] : '';
+      badgeHtml = `<span class="badge-failed" title="${errTip}">❌ Failed</span>`
+        + (account ? `<div style="color:#c0392b;font-size:11px;font-weight:600;margin-top:3px;" title="${errTip}">⚠ ${escHtml(account)}</div>` : '');
     } else if (isProcessing && hasFullAnsw) {
       // v4.20: differentiate "running" from "actually stuck" using the time
       // since the last recorded step. <5 min = running. >5 min = stuck.
@@ -1215,6 +1221,7 @@ async function rescoreAllPqi() {
   } catch (e) { alert('Re-score failed: ' + e.message); }
 }
 
+function downloadPmResults() { return downloadXlsx('/api/admin/pm/results.xlsx', 'PlantManager_Results.xlsx', 'Results'); }
 function downloadPqiResults() { return downloadXlsx('/api/admin/pqi/results.xlsx', 'PQI_Results.xlsx', 'Results'); }
 function downloadPqiValidation() { return downloadXlsx('/api/admin/pqi/validation.xlsx', 'PQI_Validation.xlsx', 'Validation table'); }
 

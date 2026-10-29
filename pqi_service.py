@@ -38,6 +38,7 @@ from pathlib import Path
 import database
 import pqi_evaluator as evaluator
 import pqi_scoring as scoring
+from ai_account import account_problem
 from assessment_types import PQI
 from pqi_generator import generate_form
 from pqi_master import load_master, srt_index
@@ -413,7 +414,7 @@ async def run_pipeline(session_id: str, session: dict, client) -> None:
         await _run(session_id, session, client)
     except Exception as exc:
         logger.exception("Unexpected PQI pipeline error for %s", session_id)
-        _fail(session_id, session, f"Unexpected error: {exc}")
+        _fail(session_id, session, account_problem(exc) or f"Unexpected error: {exc}")
 
 
 async def _run(session_id: str, session: dict, client) -> None:
@@ -483,6 +484,10 @@ async def _run(session_id: str, session: dict, client) -> None:
     session["scores"] = {s["srt_id"]: results[s["srt_id"]] for s in snapshot if s["srt_id"] in results}
     database.update_session(session_id, scores=session["scores"], progress=len(results))
     if errors:
+        problem = account_problem(list(errors.values()))
+        if problem:
+            _fail(session_id, session, f"{problem} ({len(results)} of {len(snapshot)} evaluations completed.)")
+            return
         detail = "; ".join(f"{k}: {v[:120]}" for k, v in list(errors.items())[:3])
         _fail(session_id, session, f"Evaluation failed for {len(errors)} of {len(snapshot)} SRT(s) ({detail}). "
                                    "Click Rescore — completed evaluations are kept.")
@@ -561,7 +566,8 @@ async def _run(session_id: str, session: dict, client) -> None:
         _, narrative = await asyncio.to_thread(evaluator.write_report, client, master, narrative_input(report),
                                                list(by_id), rubric)
     except evaluator.EvaluatorError as exc:
-        _fail(session_id, session, f"Report narrative failed: {exc}. Click Rescore — evaluations are kept.")
+        _fail(session_id, session, account_problem(exc)
+              or f"Report narrative failed: {exc}. Click Rescore — evaluations are kept.")
         return
     report.update(narrative)
     report["usage"] = evaluator.usage_summary(usage)
@@ -632,7 +638,7 @@ async def reissue_report(session_id: str, session: dict, client) -> None:
         _, narrative = await asyncio.to_thread(evaluator.write_report, client, master, narrative_input(report),
                                                [s["srt_id"] for s in snapshot], rubric)
     except evaluator.EvaluatorError as exc:
-        give_up(f"report narrative: {exc}")
+        give_up(account_problem(exc) or f"report narrative: {exc}")
         return
     report.update(narrative)
     report["usage"] = evaluator.usage_summary(usage)

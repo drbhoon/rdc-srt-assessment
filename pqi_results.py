@@ -61,6 +61,23 @@ def _titles(items) -> str:
     return "; ".join(str(i.get("title", "")).strip() for i in items or [] if str(i.get("title", "")).strip())
 
 
+def not_completed_sheet(wb, pending: list, identities: dict) -> None:
+    """Candidates without a finished report — shared by the PQI and Plant Manager results reports."""
+    nc = wb.create_sheet("Not completed")
+    nc.append(["Emp Code", "Name", "Location", "Candidate type", "Status", "Answers saved", "Started", "Note"])
+    for cell in nc[1]:
+        cell.fill, cell.font = HEADER_FILL, HEADER_FONT
+    for s in sorted(pending, key=lambda s: s.get("status") or ""):
+        cand, who = s.get("candidate") or {}, identities.get(s["session_id"]) or {}
+        saved = sum(1 for v in (s.get("collected_answers") or {}).values() if str(v or "").strip())
+        nc.append([who.get("employee_code") or "—", cand.get("candidate_name"), cand.get("plant_location"),
+                   "Employee" if (cand.get("candidate_type") or "employee") == "employee" else "External",
+                   STATUS_LABELS.get(s.get("status"), s.get("status")), f"{saved}/{len(s.get('questions') or [])}",
+                   cand.get("assessment_date"), (s.get("error") or "")[:200]])
+    for col, width in zip("ABCDEFGH", (11, 24, 18, 11, 18, 12, 12, 70)):
+        nc.column_dimensions[col].width = width
+
+
 def build_results(sessions: list, identities: dict, designations: dict, master: dict | None) -> bytes:
     """sessions: full PQI session dicts (with session_id); identities: database.session_identities;
     designations: {casefolded employee code: designation}; master: the current PQI master (competency names)."""
@@ -150,20 +167,7 @@ def build_results(sessions: list, identities: dict, designations: dict, master: 
     for i, h in enumerate(header, start=1):
         ws.column_dimensions[get_column_letter(i)].width = widths.get(h, 12 if i >= comp_first else 10)
 
-    # ── Not completed ────────────────────────────────────────────────────────
-    nc = wb.create_sheet("Not completed")
-    nc.append(["Emp Code", "Name", "Location", "Candidate type", "Status", "Answers saved", "Started", "Note"])
-    for cell in nc[1]:
-        cell.fill, cell.font = HEADER_FILL, HEADER_FONT
-    for s in sorted(pending, key=lambda s: s.get("status") or ""):
-        cand, who = s.get("candidate") or {}, identities.get(s["session_id"]) or {}
-        saved = sum(1 for v in (s.get("collected_answers") or {}).values() if str(v or "").strip())
-        nc.append([who.get("employee_code") or "—", cand.get("candidate_name"), cand.get("plant_location"),
-                   "Employee" if (cand.get("candidate_type") or "employee") == "employee" else "External",
-                   STATUS_LABELS.get(s.get("status"), s.get("status")), f"{saved}/{len(s.get('questions') or [])}",
-                   cand.get("assessment_date"), (s.get("error") or "")[:200]])
-    for col, width in zip("ABCDEFGH", (11, 24, 18, 11, 18, 12, 12, 70)):
-        nc.column_dimensions[col].width = width
+    not_completed_sheet(wb, pending, identities)
 
     # ── Competency key ───────────────────────────────────────────────────────
     key = wb.create_sheet("Competency key")
